@@ -8,6 +8,8 @@ import StatePanel from '../components/ui/StatePanel'
 import useResource from '../hooks/useResource'
 import { getQuote } from '../services/tradeService'
 import { formatMoney } from '../utils/format'
+import StockSearch from '../components/StockSearch'
+import { isDemo } from '../data/demoData'
 
 export default function Trade() {
   const [symbol, setSymbol] = useState('')
@@ -87,6 +89,8 @@ export default function Trade() {
         </div>
         <Badge variant="demo">UI only</Badge>
       </div>
+
+      <StockSearch />
 
       <div className="page-grid page-grid--split">
         <Card title="Order ticket" action={<Badge variant="demo">DEMO</Badge>}>
