@@ -3,16 +3,16 @@ import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
-import useResource from '../hooks/useResource'
-import { getTransactions } from '../services/historyService'
+import useAuth from '../lib/useAuth'
+import useTickets from '../lib/useTickets'
 import { formatMoney } from '../utils/format'
 
 const transactionColumns = [
   {
-    key: 'type',
+    key: 'side',
     label: 'Type',
     render: (row) => (
-      <Badge variant={row.type === 'BUY' ? 'buy' : 'sell'}>{row.type}</Badge>
+      <Badge variant={row.side === 'BUY' ? 'buy' : 'sell'}>{row.side}</Badge>
     ),
   },
   { key: 'symbol', label: 'Symbol' },
@@ -26,49 +26,49 @@ const transactionColumns = [
     key: 'price',
     label: 'Price',
     align: 'right',
-    render: (row) => formatMoney(row.price),
+    render: (row) => formatMoney(Number(row.price)),
   },
-  { key: 'date', label: 'Date' },
+  {
+    key: 'total',
+    label: 'Total',
+    align: 'right',
+    render: (row) => formatMoney(Number(row.price) * Number(row.quantity)),
+  },
+  { key: 'status', label: 'Status' },
+  {
+    key: 'created_at',
+    label: 'Date',
+    render: (row) => new Date(row.created_at).toLocaleString(),
+  },
 ]
 
 export default function History() {
-  const transactions = useResource(getTransactions)
+  const { user, loading: authLoading } = useAuth()
+  const { tickets, loading, error } = useTickets(user?.id)
+  const isLoading = authLoading || loading
 
   function renderTransactionsBody() {
-    if (transactions.status === 'loading') {
-      return (
-        <StatePanel variant="loading" message="Loading transactions…" />
-      )
+    if (isLoading) {
+      return <StatePanel variant="loading" message="Loading transactions…" />
     }
-    if (transactions.status === 'error') {
+    if (error) {
       return (
         <StatePanel
           variant="error"
-          message={
-            transactions.error?.message || 'Failed to load transactions.'
-          }
-          onRetry={transactions.reload}
+          message={typeof error === 'string' ? error : 'Failed to load transactions.'}
         />
       )
     }
-    if (
-      transactions.status === 'success' &&
-      transactions.data?.items.length === 0
-    ) {
-      return (
-        <StatePanel variant="empty" message="No transactions yet." />
-      )
+    if (!tickets || tickets.length === 0) {
+      return <StatePanel variant="empty" message="No transactions yet." />
     }
-    if (transactions.status === 'success') {
-      return (
-        <Table
-          columns={transactionColumns}
-          rows={transactions.data.items}
-          emptyMessage="No transactions yet."
-        />
-      )
-    }
-    return null
+    return (
+      <Table
+        columns={transactionColumns}
+        rows={tickets}
+        emptyMessage="No transactions yet."
+      />
+    )
   }
 
   return (
@@ -78,22 +78,16 @@ export default function History() {
           <h1>History / Stats</h1>
           <p>Past paper trades and performance overview.</p>
         </div>
-        {transactions.data?.isDemo ? (
-          <Badge variant="demo">DEMO data</Badge>
-        ) : null}
       </div>
 
+      {!authLoading && !user ? (
+        <p className="auth-message auth-message--error" role="alert">
+          Log in to see your trade history.
+        </p>
+      ) : null}
+
       <div className="page-grid page-grid--split">
-        <Card
-          title="Transaction history"
-          action={
-            transactions.data?.isDemo ? (
-              <Badge variant="demo">DEMO</Badge>
-            ) : null
-          }
-        >
-          {renderTransactionsBody()}
-        </Card>
+        <Card title="Transaction history">{renderTransactionsBody()}</Card>
 
         <Card title="Performance">
           <ChartPlaceholder

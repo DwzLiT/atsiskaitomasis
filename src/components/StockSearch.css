@@ -3,13 +3,13 @@
   text-align: left;
 }
 
-.stock-search form {
+.stock-search__form {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.stock-search input {
+.stock-search__form input {
   flex: 1;
   min-width: 160px;
   padding: 8px 12px;
@@ -20,17 +20,17 @@
   border-radius: 6px;
 }
 
-.stock-search button {
+.stock-search__form button {
   padding: 8px 18px;
   font: inherit;
   color: var(--accent);
-  background: var(--accent-bg);
+  background: var(--accent-soft);
   border: 1px solid var(--accent-border);
   border-radius: 6px;
   cursor: pointer;
 }
 
-.stock-search button:disabled {
+.stock-search__form button:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -71,4 +71,61 @@
 .stock-date {
   flex-basis: 100%;
   font-size: 0.85em;
+}
+
+.stock-status {
+  color: var(--text-muted);
+}
+
+.stock-results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stock-results li + li {
+  border-top: 1px solid var(--border);
+}
+
+.stock-search .stock-results button {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.stock-search .stock-results button:hover,
+.stock-search .stock-results button:focus-visible {
+  background: var(--accent-soft);
+}
+
+.stock-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.stock-region {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.stock-trade {
+  flex-basis: 100%;
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.trade-toggle .btn {
+  flex: 1;
 }

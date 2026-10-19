@@ -7,16 +7,54 @@ import Input from '../components/ui/Input'
 import StatCard from '../components/ui/StatCard'
 import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
+import useAuth from '../lib/useAuth'
+import usePortfolio from '../lib/usePortfolio'
 import useResource from '../hooks/useResource'
-import {
-  getHoldings,
-  getPortfolioSummary,
-  getWatchlist,
-} from '../services/portfolioService'
+import { getWatchlist } from '../services/portfolioService'
 import { formatChange, formatMoney } from '../utils/format'
+
+function formatSignedMoney(value) {
+  return `${value > 0 ? '+' : ''}${formatMoney(value)}`
+}
+
+function formatSignedPercent(value) {
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function toneOf(value) {
+  return value > 0 ? 'positive' : value < 0 ? 'negative' : ''
+}
+
+// Adds market value and P&L to each position. Falls back to avg cost when
+// the instrument has no price yet, so P&L shows as 0 instead of -100%.
+function toHoldings(positions) {
+  return (positions ?? []).map((position) => {
+    const shares = Number(position.shares)
+    const avgCost = Number(position.avg_cost)
+    const rawPrice = position.instruments?.price
+    const price = rawPrice == null ? null : Number(rawPrice)
+    const costBasis = shares * avgCost
+    const marketValue = shares * (price ?? avgCost)
+    const profitLoss = marketValue - costBasis
+
+    return {
+      id: position.symbol,
+      symbol: position.symbol,
+      company: position.instruments?.company ?? '—',
+      shares,
+      avgCost,
+      price,
+      costBasis,
+      marketValue,
+      profitLoss,
+      profitLossPercent: costBasis > 0 ? (profitLoss / costBasis) * 100 : 0,
+    }
+  })
+}
 
 const holdingColumns = [
   { key: 'symbol', label: 'Symbol' },
+  { key: 'company', label: 'Company' },
   {
     key: 'shares',
     label: 'Shares',
@@ -30,36 +68,63 @@ const holdingColumns = [
     render: (row) => formatMoney(row.avgCost),
   },
   {
+    key: 'price',
+    label: 'Price',
+    align: 'right',
+    render: (row) => (row.price == null ? '—' : formatMoney(row.price)),
+  },
+  {
     key: 'marketValue',
     label: 'Market Value',
     align: 'right',
     render: (row) => formatMoney(row.marketValue),
   },
+  {
+    key: 'profitLoss',
+    label: 'P&L ($)',
+    align: 'right',
+    render: (row) => (
+      <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
+        {formatSignedMoney(row.profitLoss)}
+      </span>
+    ),
+  },
+  {
+    key: 'profitLossPercent',
+    label: 'P&L (%)',
+    align: 'right',
+    render: (row) => (
+      <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
+        {formatSignedPercent(row.profitLossPercent)}
+      </span>
+    ),
+  },
 ]
 
 export default function Portfolio() {
-  const summary = useResource(getPortfolioSummary)
-  const holdings = useResource(getHoldings)
+  const { user, loading: authLoading } = useAuth()
+  const { trader, positions, loading, error, reload } = usePortfolio(user?.id)
   const watchlistResource = useResource(getWatchlist)
 
   /** Local UI-only edits; null means show server/DEMO payload as-is. */
   const [watchlistOverride, setWatchlistOverride] = useState(null)
   const [watchSymbol, setWatchSymbol] = useState('')
 
+  const holdings = toHoldings(positions)
+  const cash = Number(trader?.cash_balance ?? 0)
+  const portfolioValue = holdings.reduce((sum, row) => sum + row.marketValue, 0)
+  const totalCost = holdings.reduce((sum, row) => sum + row.costBasis, 0)
+  const totalValue = cash + portfolioValue
+  const totalProfitLoss = portfolioValue - totalCost
+  const totalProfitLossPercent =
+    totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0
+  const isLoading = authLoading || loading
+
   const watchlist =
     watchlistOverride ??
     (watchlistResource.status === 'success'
       ? watchlistResource.data.items
       : [])
-
-  const showDemoBadge =
-    summary.data?.isDemo ||
-    holdings.data?.isDemo ||
-    watchlistResource.data?.isDemo
-
-  const pl = summary.data?.profitLoss ?? 0
-  const plTone = pl >= 0 ? 'positive' : 'negative'
-  const plSign = pl >= 0 ? '+' : ''
 
   function handleAddToWatchlist(event) {
     event.preventDefault()
@@ -110,14 +175,8 @@ export default function Portfolio() {
         if (row.changePercent == null) {
           return <span className="mono">— · DEMO</span>
         }
-        const tone =
-          row.changePercent > 0
-            ? 'positive'
-            : row.changePercent < 0
-              ? 'negative'
-              : ''
         return (
-          <span className={`mono ${tone}`.trim()}>
+          <span className={`mono ${toneOf(row.changePercent)}`.trim()}>
             {formatChange(row.changePercent)}
           </span>
         )
@@ -142,33 +201,28 @@ export default function Portfolio() {
   ]
 
   function renderHoldingsBody() {
-    if (holdings.status === 'loading') {
-      return <StatePanel variant="loading" message="Loading holdings…" />
+    if (isLoading) {
+      return <StatePanel variant="loading" message="Loading positions…" />
     }
-    if (holdings.status === 'error') {
+    if (error) {
       return (
         <StatePanel
           variant="error"
-          message={holdings.error?.message || 'Failed to load holdings.'}
-          onRetry={holdings.reload}
+          message={typeof error === 'string' ? error : 'Failed to load positions.'}
+          onRetry={reload}
         />
       )
     }
-    if (holdings.status === 'success' && holdings.data?.items.length === 0) {
-      return (
-        <StatePanel variant="empty" message="No holdings yet." />
-      )
+    if (holdings.length === 0) {
+      return <StatePanel variant="empty" message="No positions yet." />
     }
-    if (holdings.status === 'success') {
-      return (
-        <Table
-          columns={holdingColumns}
-          rows={holdings.data.items}
-          emptyMessage="No holdings yet."
-        />
-      )
-    }
-    return null
+    return (
+      <Table
+        columns={holdingColumns}
+        rows={holdings}
+        emptyMessage="No positions yet."
+      />
+    )
   }
 
   function renderWatchlistBody() {
@@ -213,78 +267,50 @@ export default function Portfolio() {
           <h1>Portfolio</h1>
           <p>Virtual balance, holdings, and portfolio overview.</p>
         </div>
-        {showDemoBadge ? <Badge variant="demo">DEMO data</Badge> : null}
       </div>
 
-      <div className="page-grid page-grid--stats">
-        {summary.status === 'loading' ? (
-          <>
-            <Card>
-              <StatePanel variant="loading" message="Loading balance…" />
-            </Card>
-            <Card>
-              <StatePanel variant="loading" message="Loading value…" />
-            </Card>
-            <Card>
-              <StatePanel variant="loading" message="Loading P/L…" />
-            </Card>
-          </>
-        ) : null}
+      {!authLoading && !user ? (
+        <p className="auth-message auth-message--error" role="alert">
+          Log in to see your portfolio.
+        </p>
+      ) : null}
 
-        {summary.status === 'error' ? (
-          <Card>
-            <StatePanel
-              variant="error"
-              message={
-                summary.error?.message || 'Failed to load portfolio summary.'
-              }
-              onRetry={summary.reload}
-            />
-          </Card>
-        ) : null}
-
-        {summary.status === 'success' && summary.data ? (
-          <>
-            <StatCard
-              label="Virtual Balance"
-              value={formatMoney(summary.data.cash)}
-              hint="Available cash (paper trading)"
-              isDemo={summary.data.isDemo}
-            />
-            <StatCard
-              label="Portfolio Value"
-              value={formatMoney(summary.data.portfolioValue)}
-              hint="Cash + holdings (DEMO)"
-              isDemo={summary.data.isDemo}
-            />
-            <StatCard
-              label="Profit / Loss"
-              value={`${plSign}${formatMoney(summary.data.profitLoss)}`}
-              hint={`${plSign}${summary.data.profitLossPercent}% vs starting capital`}
-              tone={plTone}
-              isDemo={summary.data.isDemo}
-            />
-          </>
-        ) : null}
-      </div>
-
-      <div className="page-grid page-grid--split">
-        <Card
-          title="Holdings"
-          action={
-            holdings.data?.isDemo ? <Badge variant="demo">DEMO</Badge> : null
+      <div className="page-grid page-grid--stats page-grid--stats-4">
+        <StatCard
+          label="Cash"
+          value={isLoading ? '…' : formatMoney(cash)}
+          hint="Available to trade"
+        />
+        <StatCard
+          label="Portfolio Value"
+          value={isLoading ? '…' : formatMoney(portfolioValue)}
+          hint="Market value of positions"
+        />
+        <StatCard
+          label="Total Value"
+          value={isLoading ? '…' : formatMoney(totalValue)}
+          hint="Cash + positions"
+        />
+        <StatCard
+          label="Total P&L"
+          value={isLoading ? '…' : formatSignedMoney(totalProfitLoss)}
+          hint={
+            isLoading
+              ? 'Unrealized, on positions held'
+              : `${formatSignedPercent(totalProfitLossPercent)} on cost · unrealized`
           }
-        >
-          {renderHoldingsBody()}
-        </Card>
-
-        <Card title="Portfolio value">
-          <ChartPlaceholder
-            title="Portfolio value over time"
-            description="Reserved for portfolio value chart. Charts will be added by the team."
-          />
-        </Card>
+          tone={isLoading ? undefined : toneOf(totalProfitLoss)}
+        />
       </div>
+
+      <Card title="Positions">{renderHoldingsBody()}</Card>
+
+      <Card title="Portfolio value">
+        <ChartPlaceholder
+          title="Portfolio value over time"
+          description="Reserved for portfolio value chart. Charts will be added by the team."
+        />
+      </Card>
 
       <Card
         title="Watchlist"
