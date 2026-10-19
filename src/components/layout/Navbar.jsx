@@ -2,6 +2,7 @@ const NAV_ITEMS = [
   { id: 'portfolio', label: 'Portfolio' },
   { id: 'trade', label: 'Trade' },
   { id: 'history', label: 'History' },
+  { id: 'register', label: 'Register' },
 ]
 
 export default function Navbar({ currentPage, onNavigate }) {
