@@ -1,4 +1,4 @@
--- Re-adds the server-side place_ticket(trader_id, symbol, side, quantity) used by
+run SQL for me-- Re-adds the server-side place_ticket(trader_id, symbol, side, quantity) used by
 -- POST /api/tickets. It has a different signature from the 3-argument
 -- place_ticket(symbol, side, quantity), so both can coexist.
 -- Run in the Supabase SQL editor. The last line refreshes the API schema cache.
