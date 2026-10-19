@@ -28,3 +28,57 @@
   background: var(--buy-soft);
   border-color: var(--buy-border);
 }
+
+.auth-switch {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.auth-switch__link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.auth-switch__link:hover {
+  text-decoration: underline;
+}
+
+/* —— Navbar account area —— */
+.navbar__account {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.navbar__user {
+  font-size: 0.8rem;
+  color: var(--text);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .navbar__inner .navbar__brand {
+    flex: 1 1 0;
+  }
+
+  .navbar__inner .navbar__nav {
+    order: 3;
+  }
+
+  .navbar__account {
+    flex-shrink: 1;
+  }
+
+  .navbar__user {
+    max-width: 110px;
+  }
+}

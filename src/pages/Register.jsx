@@ -7,7 +7,7 @@ import '../styles/auth.css'
 
 const MIN_PASSWORD_LENGTH = 6
 
-export default function Register() {
+export default function Register({ onNavigate }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -49,13 +49,14 @@ export default function Register() {
       return
     }
 
+    if (data.session) {
+      onNavigate('portfolio')
+      return
+    }
+
     setPassword('')
     setConfirmPassword('')
-    setSuccess(
-      data.session
-        ? 'Account created. You are now signed in.'
-        : 'Account created. Check your email to confirm your address.',
-    )
+    setSuccess('Account created. Check your email to confirm your address, then log in.')
   }
 
   return (
@@ -122,6 +123,17 @@ export default function Register() {
           <Button type="submit" variant="primary" block disabled={loading}>
             {loading ? 'Creating account…' : 'Register'}
           </Button>
+
+          <p className="auth-switch">
+            Already have an account?{' '}
+            <button
+              type="button"
+              className="auth-switch__link"
+              onClick={() => onNavigate('login')}
+            >
+              Log in
+            </button>
+          </p>
         </form>
       </Card>
     </div>
