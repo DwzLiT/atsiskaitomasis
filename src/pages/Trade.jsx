@@ -4,6 +4,7 @@ import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import Input from '../components/ui/Input'
+import StockSearch from '../components/StockSearch'
 import { isDemo } from '../data/demoData'
 
 export default function Trade() {
@@ -21,6 +22,8 @@ export default function Trade() {
         </div>
         {isDemo ? <Badge variant="demo">UI only</Badge> : null}
       </div>
+
+      <StockSearch />
 
       <div className="page-grid page-grid--split">
         <Card title="Order ticket" action={<Badge variant="demo">DEMO</Badge>}>

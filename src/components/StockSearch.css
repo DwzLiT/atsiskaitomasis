@@ -1,0 +1,74 @@
+.stock-search {
+  padding: 32px 20px;
+  text-align: left;
+}
+
+.stock-search form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.stock-search input {
+  flex: 1;
+  min-width: 160px;
+  padding: 8px 12px;
+  font: inherit;
+  color: var(--text-h);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.stock-search button {
+  padding: 8px 18px;
+  font: inherit;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.stock-search button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.stock-error {
+  color: #dc2626;
+}
+
+.stock-quote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.stock-symbol {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.stock-price {
+  font-size: 1.6em;
+  color: var(--text-h);
+}
+
+.stock-up {
+  color: #16a34a;
+}
+
+.stock-down {
+  color: #dc2626;
+}
+
+.stock-date {
+  flex-basis: 100%;
+  font-size: 0.85em;
+}
