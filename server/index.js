@@ -51,6 +51,15 @@ app.get('/api/quotes/:symbol', wrap(async (req, res) => {
   res.json(data)
 }))
 
+// All tickets across traders, newest first, with the trader's name.
+app.get('/api/tickets', wrap(async (_req, res) => {
+  const { data, error } = await supabase
+    .from('tickets').select('*, traders(name)')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  res.json(data.map(({ traders, ...ticket }) => ({ ...ticket, trader_name: traders?.name })))
+}))
+
 // Create (and execute) a BUY or SELL ticket at the current instrument price.
 app.post('/api/tickets', wrap(async (req, res) => {
   const { trader_id, symbol, side, quantity } = req.body ?? {}

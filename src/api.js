@@ -10,6 +10,7 @@ async function request(path, options) {
 
 export const api = {
   traders: () => request('/traders'),
+  allTickets: () => request('/tickets'),
   tickets: (traderId) => request(`/traders/${traderId}/tickets`),
   quote: (symbol) => request(`/quotes/${encodeURIComponent(symbol)}`),
   placeTicket: (ticket) =>
