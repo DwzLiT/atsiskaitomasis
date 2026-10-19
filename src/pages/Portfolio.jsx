@@ -5,26 +5,15 @@ import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import Input from '../components/ui/Input'
 import StatCard from '../components/ui/StatCard'
+import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
+import useResource from '../hooks/useResource'
 import {
-  demoBalance,
-  demoHoldings,
-  demoWatchlist,
-  isDemo,
-} from '../data/demoData'
-
-function formatMoney(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
-
-function formatChange(changePercent) {
-  if (changePercent == null) return '— · DEMO'
-  const sign = changePercent > 0 ? '+' : ''
-  return `${sign}${changePercent.toFixed(2)}%`
-}
+  getHoldings,
+  getPortfolioSummary,
+  getWatchlist,
+} from '../services/portfolioService'
+import { formatChange, formatMoney } from '../utils/format'
 
 const holdingColumns = [
   { key: 'symbol', label: 'Symbol' },
@@ -49,11 +38,28 @@ const holdingColumns = [
 ]
 
 export default function Portfolio() {
-  const [watchlist, setWatchlist] = useState(demoWatchlist)
+  const summary = useResource(getPortfolioSummary)
+  const holdings = useResource(getHoldings)
+  const watchlistResource = useResource(getWatchlist)
+
+  /** Local UI-only edits; null means show server/DEMO payload as-is. */
+  const [watchlistOverride, setWatchlistOverride] = useState(null)
   const [watchSymbol, setWatchSymbol] = useState('')
 
-  const plTone = demoBalance.profitLoss >= 0 ? 'positive' : 'negative'
-  const plSign = demoBalance.profitLoss >= 0 ? '+' : ''
+  const watchlist =
+    watchlistOverride ??
+    (watchlistResource.status === 'success'
+      ? watchlistResource.data.items
+      : [])
+
+  const showDemoBadge =
+    summary.data?.isDemo ||
+    holdings.data?.isDemo ||
+    watchlistResource.data?.isDemo
+
+  const pl = summary.data?.profitLoss ?? 0
+  const plTone = pl >= 0 ? 'positive' : 'negative'
+  const plSign = pl >= 0 ? '+' : ''
 
   function handleAddToWatchlist(event) {
     event.preventDefault()
@@ -64,8 +70,8 @@ export default function Portfolio() {
       return
     }
 
-    setWatchlist((prev) => [
-      ...prev,
+    setWatchlistOverride([
+      ...watchlist,
       {
         id: `demo-watch-${symbol.toLowerCase()}-${Date.now()}`,
         symbol,
@@ -78,7 +84,12 @@ export default function Portfolio() {
   }
 
   function handleRemoveFromWatchlist(id) {
-    setWatchlist((prev) => prev.filter((item) => item.id !== id))
+    setWatchlistOverride(watchlist.filter((item) => item.id !== id))
+  }
+
+  function handleRetryWatchlist() {
+    setWatchlistOverride(null)
+    watchlistResource.reload()
   }
 
   const watchlistColumns = [
@@ -130,6 +141,71 @@ export default function Portfolio() {
     },
   ]
 
+  function renderHoldingsBody() {
+    if (holdings.status === 'loading') {
+      return <StatePanel variant="loading" message="Loading holdings…" />
+    }
+    if (holdings.status === 'error') {
+      return (
+        <StatePanel
+          variant="error"
+          message={holdings.error?.message || 'Failed to load holdings.'}
+          onRetry={holdings.reload}
+        />
+      )
+    }
+    if (holdings.status === 'success' && holdings.data?.items.length === 0) {
+      return (
+        <StatePanel variant="empty" message="No holdings yet." />
+      )
+    }
+    if (holdings.status === 'success') {
+      return (
+        <Table
+          columns={holdingColumns}
+          rows={holdings.data.items}
+          emptyMessage="No holdings yet."
+        />
+      )
+    }
+    return null
+  }
+
+  function renderWatchlistBody() {
+    if (watchlistResource.status === 'loading') {
+      return <StatePanel variant="loading" message="Loading watchlist…" />
+    }
+    if (watchlistResource.status === 'error') {
+      return (
+        <StatePanel
+          variant="error"
+          message={
+            watchlistResource.error?.message || 'Failed to load watchlist.'
+          }
+          onRetry={handleRetryWatchlist}
+        />
+      )
+    }
+    if (watchlistResource.status === 'success' && watchlist.length === 0) {
+      return (
+        <StatePanel
+          variant="empty"
+          message="Watchlist is empty. Add a symbol above."
+        />
+      )
+    }
+    if (watchlistResource.status === 'success') {
+      return (
+        <Table
+          columns={watchlistColumns}
+          rows={watchlist}
+          emptyMessage="Watchlist is empty. Add a symbol above."
+        />
+      )
+    }
+    return null
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -137,41 +213,69 @@ export default function Portfolio() {
           <h1>Portfolio</h1>
           <p>Virtual balance, holdings, and portfolio overview.</p>
         </div>
-        {isDemo ? <Badge variant="demo">DEMO data</Badge> : null}
+        {showDemoBadge ? <Badge variant="demo">DEMO data</Badge> : null}
       </div>
 
       <div className="page-grid page-grid--stats">
-        <StatCard
-          label="Virtual Balance"
-          value={formatMoney(demoBalance.cash)}
-          hint="Available cash (paper trading)"
-          isDemo={isDemo}
-        />
-        <StatCard
-          label="Portfolio Value"
-          value={formatMoney(demoBalance.portfolioValue)}
-          hint="Cash + holdings (DEMO)"
-          isDemo={isDemo}
-        />
-        <StatCard
-          label="Profit / Loss"
-          value={`${plSign}${formatMoney(demoBalance.profitLoss)}`}
-          hint={`${plSign}${demoBalance.profitLossPercent}% vs starting capital`}
-          tone={plTone}
-          isDemo={isDemo}
-        />
+        {summary.status === 'loading' ? (
+          <>
+            <Card>
+              <StatePanel variant="loading" message="Loading balance…" />
+            </Card>
+            <Card>
+              <StatePanel variant="loading" message="Loading value…" />
+            </Card>
+            <Card>
+              <StatePanel variant="loading" message="Loading P/L…" />
+            </Card>
+          </>
+        ) : null}
+
+        {summary.status === 'error' ? (
+          <Card>
+            <StatePanel
+              variant="error"
+              message={
+                summary.error?.message || 'Failed to load portfolio summary.'
+              }
+              onRetry={summary.reload}
+            />
+          </Card>
+        ) : null}
+
+        {summary.status === 'success' && summary.data ? (
+          <>
+            <StatCard
+              label="Virtual Balance"
+              value={formatMoney(summary.data.cash)}
+              hint="Available cash (paper trading)"
+              isDemo={summary.data.isDemo}
+            />
+            <StatCard
+              label="Portfolio Value"
+              value={formatMoney(summary.data.portfolioValue)}
+              hint="Cash + holdings (DEMO)"
+              isDemo={summary.data.isDemo}
+            />
+            <StatCard
+              label="Profit / Loss"
+              value={`${plSign}${formatMoney(summary.data.profitLoss)}`}
+              hint={`${plSign}${summary.data.profitLossPercent}% vs starting capital`}
+              tone={plTone}
+              isDemo={summary.data.isDemo}
+            />
+          </>
+        ) : null}
       </div>
 
       <div className="page-grid page-grid--split">
         <Card
           title="Holdings"
-          action={isDemo ? <Badge variant="demo">DEMO</Badge> : null}
+          action={
+            holdings.data?.isDemo ? <Badge variant="demo">DEMO</Badge> : null
+          }
         >
-          <Table
-            columns={holdingColumns}
-            rows={demoHoldings}
-            emptyMessage="No holdings yet."
-          />
+          {renderHoldingsBody()}
         </Card>
 
         <Card title="Portfolio value">
@@ -184,7 +288,11 @@ export default function Portfolio() {
 
       <Card
         title="Watchlist"
-        action={isDemo ? <Badge variant="demo">DEMO · UI only</Badge> : null}
+        action={
+          watchlistResource.data?.isDemo ? (
+            <Badge variant="demo">DEMO · UI only</Badge>
+          ) : null
+        }
       >
         <form className="watchlist-form" onSubmit={handleAddToWatchlist}>
           <Input
@@ -195,19 +303,20 @@ export default function Portfolio() {
             value={watchSymbol}
             onChange={(event) => setWatchSymbol(event.target.value)}
             autoComplete="off"
+            disabled={watchlistResource.status !== 'success'}
           />
           <div className="watchlist-form__action">
-            <Button variant="primary" type="submit">
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={watchlistResource.status !== 'success'}
+            >
               Add to Watchlist
             </Button>
           </div>
         </form>
 
-        <Table
-          columns={watchlistColumns}
-          rows={watchlist}
-          emptyMessage="Watchlist is empty. Add a symbol above."
-        />
+        {renderWatchlistBody()}
 
         <p className="ui-note watchlist-note">
           Add / Remove are UI-only. Changes stay in this session and are not

@@ -1,15 +1,11 @@
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
+import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
-import { demoTransactions, isDemo } from '../data/demoData'
-
-function formatMoney(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
+import useResource from '../hooks/useResource'
+import { getTransactions } from '../services/historyService'
+import { formatMoney } from '../utils/format'
 
 const transactionColumns = [
   {
@@ -36,6 +32,45 @@ const transactionColumns = [
 ]
 
 export default function History() {
+  const transactions = useResource(getTransactions)
+
+  function renderTransactionsBody() {
+    if (transactions.status === 'loading') {
+      return (
+        <StatePanel variant="loading" message="Loading transactions…" />
+      )
+    }
+    if (transactions.status === 'error') {
+      return (
+        <StatePanel
+          variant="error"
+          message={
+            transactions.error?.message || 'Failed to load transactions.'
+          }
+          onRetry={transactions.reload}
+        />
+      )
+    }
+    if (
+      transactions.status === 'success' &&
+      transactions.data?.items.length === 0
+    ) {
+      return (
+        <StatePanel variant="empty" message="No transactions yet." />
+      )
+    }
+    if (transactions.status === 'success') {
+      return (
+        <Table
+          columns={transactionColumns}
+          rows={transactions.data.items}
+          emptyMessage="No transactions yet."
+        />
+      )
+    }
+    return null
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -43,19 +78,21 @@ export default function History() {
           <h1>History / Stats</h1>
           <p>Past paper trades and performance overview.</p>
         </div>
-        {isDemo ? <Badge variant="demo">DEMO data</Badge> : null}
+        {transactions.data?.isDemo ? (
+          <Badge variant="demo">DEMO data</Badge>
+        ) : null}
       </div>
 
       <div className="page-grid page-grid--split">
         <Card
           title="Transaction history"
-          action={isDemo ? <Badge variant="demo">DEMO</Badge> : null}
+          action={
+            transactions.data?.isDemo ? (
+              <Badge variant="demo">DEMO</Badge>
+            ) : null
+          }
         >
-          <Table
-            columns={transactionColumns}
-            rows={demoTransactions}
-            emptyMessage="No transactions yet."
-          />
+          {renderTransactionsBody()}
         </Card>
 
         <Card title="Performance">
