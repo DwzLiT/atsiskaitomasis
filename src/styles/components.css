@@ -508,3 +508,45 @@
   background: rgba(251, 191, 36, 0.06);
   border: 1px solid rgba(251, 191, 36, 0.2);
 }
+
+/* —— Watchlist —— */
+.watchlist-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.watchlist-form .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.watchlist-form__action {
+  flex-shrink: 0;
+  padding-bottom: 0;
+}
+
+.watchlist-form__action .btn {
+  white-space: nowrap;
+}
+
+.watchlist-note {
+  margin-top: 1rem;
+}
+
+.btn--compact {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .watchlist-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .watchlist-form__action .btn {
+    width: 100%;
+  }
+}
