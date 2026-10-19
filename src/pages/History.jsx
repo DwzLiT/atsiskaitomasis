@@ -1,8 +1,9 @@
+import { useEffect, useState } from 'react'
+import { api } from '../api'
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import Table from '../components/ui/Table'
-import { demoTransactions, isDemo } from '../data/demoData'
 
 function formatMoney(value) {
   return new Intl.NumberFormat('en-US', {
@@ -16,10 +17,11 @@ const transactionColumns = [
     key: 'type',
     label: 'Type',
     render: (row) => (
-      <Badge variant={row.type === 'BUY' ? 'buy' : 'sell'}>{row.type}</Badge>
+      <Badge variant={row.side === 'BUY' ? 'buy' : 'sell'}>{row.side}</Badge>
     ),
   },
   { key: 'symbol', label: 'Symbol' },
+  { key: 'trader_name', label: 'Trader' },
   {
     key: 'quantity',
     label: 'Quantity',
@@ -32,10 +34,32 @@ const transactionColumns = [
     align: 'right',
     render: (row) => formatMoney(row.price),
   },
-  { key: 'date', label: 'Date' },
+  {
+    key: 'total',
+    label: 'Total',
+    align: 'right',
+    render: (row) => formatMoney(row.price * row.quantity),
+  },
+  {
+    key: 'date',
+    label: 'Date',
+    render: (row) => new Date(row.created_at).toLocaleString(),
+  },
 ]
 
 export default function History() {
+  const [transactions, setTransactions] = useState([])
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api
+      .allTickets()
+      .then(setTransactions)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <div className="page">
       <div className="page-header">
@@ -43,19 +67,21 @@ export default function History() {
           <h1>History / Stats</h1>
           <p>Past paper trades and performance overview.</p>
         </div>
-        {isDemo ? <Badge variant="demo">DEMO data</Badge> : null}
       </div>
 
       <div className="page-grid page-grid--split">
-        <Card
-          title="Transaction history"
-          action={isDemo ? <Badge variant="demo">DEMO</Badge> : null}
-        >
-          <Table
-            columns={transactionColumns}
-            rows={demoTransactions}
-            emptyMessage="No transactions yet."
-          />
+        <Card title="Transaction history">
+          {error ? (
+            <p className="ui-note" role="alert">
+              {error}
+            </p>
+          ) : (
+            <Table
+              columns={transactionColumns}
+              rows={transactions}
+              emptyMessage={loading ? 'Loading…' : 'No transactions yet.'}
+            />
+          )}
         </Card>
 
         <Card title="Performance">
