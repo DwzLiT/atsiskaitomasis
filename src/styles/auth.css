@@ -1,0 +1,30 @@
+/* —— Auth (registration) —— */
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-message {
+  font-size: 0.875rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+}
+
+.auth-message--error {
+  color: var(--sell);
+  background: var(--sell-soft);
+  border-color: var(--sell-border);
+}
+
+.auth-message--success {
+  color: var(--buy);
+  background: var(--buy-soft);
+  border-color: var(--buy-border);
+}
