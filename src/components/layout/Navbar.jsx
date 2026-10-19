@@ -1,10 +1,13 @@
+import Button from '../ui/Button'
+import '../../styles/auth.css'
+
 const NAV_ITEMS = [
   { id: 'portfolio', label: 'Portfolio' },
   { id: 'trade', label: 'Trade' },
   { id: 'history', label: 'History' },
 ]
 
-export default function Navbar({ currentPage, onNavigate }) {
+export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {
   return (
     <header className="navbar">
       <div className="navbar__inner">
@@ -35,6 +38,36 @@ export default function Navbar({ currentPage, onNavigate }) {
             </button>
           ))}
         </nav>
+
+        <div className="navbar__account">
+          {user ? (
+            <>
+              <span className="navbar__user" title={user.email}>
+                {user.email}
+              </span>
+              <Button variant="ghost" className="btn--compact" onClick={onSignOut}>
+                Log out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                className="btn--compact"
+                onClick={() => onNavigate('login')}
+              >
+                Log in
+              </Button>
+              <Button
+                variant="primary"
+                className="btn--compact"
+                onClick={() => onNavigate('register')}
+              >
+                Register
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </header>
   )
