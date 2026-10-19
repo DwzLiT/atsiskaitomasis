@@ -1,16 +1,11 @@
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
+import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
 import useAuth from '../lib/useAuth'
 import useTickets from '../lib/useTickets'
-
-function formatMoney(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
+import { formatMoney } from '../utils/format'
 
 const transactionColumns = [
   {
@@ -52,6 +47,30 @@ export default function History() {
   const { tickets, loading, error } = useTickets(user?.id)
   const isLoading = authLoading || loading
 
+  function renderTransactionsBody() {
+    if (isLoading) {
+      return <StatePanel variant="loading" message="Loading transactions…" />
+    }
+    if (error) {
+      return (
+        <StatePanel
+          variant="error"
+          message={typeof error === 'string' ? error : 'Failed to load transactions.'}
+        />
+      )
+    }
+    if (!tickets || tickets.length === 0) {
+      return <StatePanel variant="empty" message="No transactions yet." />
+    }
+    return (
+      <Table
+        columns={transactionColumns}
+        rows={tickets}
+        emptyMessage="No transactions yet."
+      />
+    )
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -67,20 +86,8 @@ export default function History() {
         </p>
       ) : null}
 
-      {error ? (
-        <p className="auth-message auth-message--error" role="alert">
-          {error}
-        </p>
-      ) : null}
-
       <div className="page-grid page-grid--split">
-        <Card title="Transaction history">
-          <Table
-            columns={transactionColumns}
-            rows={isLoading ? [] : tickets}
-            emptyMessage={isLoading ? 'Loading trades…' : 'No trades yet.'}
-          />
-        </Card>
+        <Card title="Transaction history">{renderTransactionsBody()}</Card>
 
         <Card title="Performance">
           <ChartPlaceholder
