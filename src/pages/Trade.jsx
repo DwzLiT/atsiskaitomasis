@@ -1,16 +1,82 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import Input from '../components/ui/Input'
-import { isDemo } from '../data/demoData'
+import StatePanel from '../components/ui/StatePanel'
+import useResource from '../hooks/useResource'
+import { getQuote } from '../services/tradeService'
+import { formatMoney } from '../utils/format'
 
 export default function Trade() {
   const [symbol, setSymbol] = useState('')
   const [quantity, setQuantity] = useState('')
+  const [lookupSymbol, setLookupSymbol] = useState('')
 
   const normalizedSymbol = symbol.trim().toUpperCase()
+  const hasLookup = Boolean(lookupSymbol)
+
+  const loadQuote = useCallback(() => getQuote(lookupSymbol), [lookupSymbol])
+  const quote = useResource(loadQuote, { enabled: hasLookup })
+
+  function handleSymbolBlur() {
+    setLookupSymbol(normalizedSymbol)
+  }
+
+  function handleSymbolKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      setLookupSymbol(normalizedSymbol)
+    }
+  }
+
+  function renderPriceDisplay() {
+    if (!hasLookup) {
+      return (
+        <div className="price-display">
+          <span className="price-display__label">Current price</span>
+          <span className="price-display__value">—</span>
+          <span className="field__hint">Enter a symbol to prepare a trade.</span>
+        </div>
+      )
+    }
+
+    if (quote.status === 'loading') {
+      return <StatePanel variant="loading" message="Loading quote…" />
+    }
+
+    if (quote.status === 'error') {
+      return (
+        <StatePanel
+          variant="error"
+          message={quote.error?.message || 'Failed to load quote.'}
+          onRetry={quote.reload}
+        />
+      )
+    }
+
+    if (quote.status === 'success' && quote.data) {
+      const priceLabel =
+        quote.data.price == null
+          ? '— · DEMO'
+          : formatMoney(quote.data.price)
+
+      return (
+        <div className="price-display">
+          <span className="price-display__label">Current price</span>
+          <span className="price-display__value">{priceLabel}</span>
+          <span className="field__hint">
+            {quote.data.isDemo
+              ? `Price for ${quote.data.symbol} will appear when the market API is connected.`
+              : `Quote for ${quote.data.symbol}`}
+          </span>
+        </div>
+      )
+    }
+
+    return null
+  }
 
   return (
     <div className="page">
@@ -19,7 +85,7 @@ export default function Trade() {
           <h1>Trade</h1>
           <p>Place virtual BUY / SELL orders for a stock symbol.</p>
         </div>
-        {isDemo ? <Badge variant="demo">UI only</Badge> : null}
+        <Badge variant="demo">UI only</Badge>
       </div>
 
       <div className="page-grid page-grid--split">
@@ -28,6 +94,7 @@ export default function Trade() {
             className="trade-form"
             onSubmit={(event) => {
               event.preventDefault()
+              setLookupSymbol(normalizedSymbol)
             }}
           >
             <Input
@@ -37,21 +104,13 @@ export default function Trade() {
               placeholder="e.g. AAPL"
               value={symbol}
               onChange={(event) => setSymbol(event.target.value)}
+              onBlur={handleSymbolBlur}
+              onKeyDown={handleSymbolKeyDown}
               autoComplete="off"
-              hint="Symbol lookup will use Alpha Vantage later."
+              hint="Press Enter or leave the field to look up (DEMO stub for now)."
             />
 
-            <div className="price-display">
-              <span className="price-display__label">Current price</span>
-              <span className="price-display__value">
-                {normalizedSymbol ? '— · DEMO' : '—'}
-              </span>
-              <span className="field__hint">
-                {normalizedSymbol
-                  ? `Price for ${normalizedSymbol} will appear when the market API is connected.`
-                  : 'Enter a symbol to prepare a trade.'}
-              </span>
-            </div>
+            {renderPriceDisplay()}
 
             <Input
               id="quantity"
@@ -67,10 +126,20 @@ export default function Trade() {
             />
 
             <div className="btn-row">
-              <Button variant="buy" type="button" disabled title="BUY logic coming soon">
+              <Button
+                variant="buy"
+                type="button"
+                disabled
+                title="BUY logic coming soon"
+              >
                 BUY
               </Button>
-              <Button variant="sell" type="button" disabled title="SELL logic coming soon">
+              <Button
+                variant="sell"
+                type="button"
+                disabled
+                title="SELL logic coming soon"
+              >
                 SELL
               </Button>
             </div>
@@ -85,8 +154,8 @@ export default function Trade() {
         <Card title="Price chart">
           <ChartPlaceholder
             title={
-              normalizedSymbol
-                ? `${normalizedSymbol} price chart`
+              lookupSymbol || normalizedSymbol
+                ? `${lookupSymbol || normalizedSymbol} price chart`
                 : 'Selected symbol price'
             }
             description="Reserved for the selected stock price chart. Charts will be added by the team."
