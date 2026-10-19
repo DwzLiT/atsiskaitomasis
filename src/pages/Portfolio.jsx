@@ -6,18 +6,54 @@ import ChartPlaceholder from '../components/ui/ChartPlaceholder'
 import Input from '../components/ui/Input'
 import StatCard from '../components/ui/StatCard'
 import Table from '../components/ui/Table'
-import {
-  demoBalance,
-  demoHoldings,
-  demoWatchlist,
-  isDemo,
-} from '../data/demoData'
+import { demoWatchlist, isDemo } from '../data/demoData'
+import useAuth from '../lib/useAuth'
+import usePortfolio from '../lib/usePortfolio'
 
 function formatMoney(value) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
   }).format(value)
+}
+
+function formatSignedMoney(value) {
+  return `${value > 0 ? '+' : ''}${formatMoney(value)}`
+}
+
+function formatSignedPercent(value) {
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function toneOf(value) {
+  return value > 0 ? 'positive' : value < 0 ? 'negative' : ''
+}
+
+// Adds market value and P&L to each position. Falls back to avg cost when
+// the instrument has no price yet, so P&L shows as 0 instead of -100%.
+function toHoldings(positions) {
+  return positions.map((position) => {
+    const shares = Number(position.shares)
+    const avgCost = Number(position.avg_cost)
+    const rawPrice = position.instruments?.price
+    const price = rawPrice == null ? null : Number(rawPrice)
+    const costBasis = shares * avgCost
+    const marketValue = shares * (price ?? avgCost)
+    const profitLoss = marketValue - costBasis
+
+    return {
+      id: position.symbol,
+      symbol: position.symbol,
+      company: position.instruments?.company ?? '—',
+      shares,
+      avgCost,
+      price,
+      costBasis,
+      marketValue,
+      profitLoss,
+      profitLossPercent: costBasis > 0 ? (profitLoss / costBasis) * 100 : 0,
+    }
+  })
 }
 
 function formatChange(changePercent) {
@@ -28,6 +64,7 @@ function formatChange(changePercent) {
 
 const holdingColumns = [
   { key: 'symbol', label: 'Symbol' },
+  { key: 'company', label: 'Company' },
   {
     key: 'shares',
     label: 'Shares',
@@ -41,19 +78,54 @@ const holdingColumns = [
     render: (row) => formatMoney(row.avgCost),
   },
   {
+    key: 'price',
+    label: 'Price',
+    align: 'right',
+    render: (row) => (row.price == null ? '—' : formatMoney(row.price)),
+  },
+  {
     key: 'marketValue',
     label: 'Market Value',
     align: 'right',
     render: (row) => formatMoney(row.marketValue),
+  },
+  {
+    key: 'profitLoss',
+    label: 'P&L ($)',
+    align: 'right',
+    render: (row) => (
+      <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
+        {formatSignedMoney(row.profitLoss)}
+      </span>
+    ),
+  },
+  {
+    key: 'profitLossPercent',
+    label: 'P&L (%)',
+    align: 'right',
+    render: (row) => (
+      <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
+        {formatSignedPercent(row.profitLossPercent)}
+      </span>
+    ),
   },
 ]
 
 export default function Portfolio() {
   const [watchlist, setWatchlist] = useState(demoWatchlist)
   const [watchSymbol, setWatchSymbol] = useState('')
+  const { user, loading: authLoading } = useAuth()
+  const { trader, positions, loading, error, reload } = usePortfolio(user?.id)
 
-  const plTone = demoBalance.profitLoss >= 0 ? 'positive' : 'negative'
-  const plSign = demoBalance.profitLoss >= 0 ? '+' : ''
+  const holdings = toHoldings(positions)
+  const cash = Number(trader?.cash_balance ?? 0)
+  const portfolioValue = holdings.reduce((sum, row) => sum + row.marketValue, 0)
+  const totalCost = holdings.reduce((sum, row) => sum + row.costBasis, 0)
+  const totalValue = cash + portfolioValue
+  const totalProfitLoss = portfolioValue - totalCost
+  const totalProfitLossPercent =
+    totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0
+  const isLoading = authLoading || loading
 
   function handleAddToWatchlist(event) {
     event.preventDefault()
@@ -140,47 +212,63 @@ export default function Portfolio() {
         {isDemo ? <Badge variant="demo">DEMO data</Badge> : null}
       </div>
 
-      <div className="page-grid page-grid--stats">
+      {!authLoading && !user ? (
+        <p className="auth-message auth-message--error" role="alert">
+          Log in to see your portfolio.
+        </p>
+      ) : null}
+
+      {error ? (
+        <p className="auth-message auth-message--error" role="alert">
+          {error}{' '}
+          <Button variant="ghost" className="btn--compact" onClick={reload}>
+            Retry
+          </Button>
+        </p>
+      ) : null}
+
+      <div className="page-grid page-grid--stats page-grid--stats-4">
         <StatCard
-          label="Virtual Balance"
-          value={formatMoney(demoBalance.cash)}
-          hint="Available cash (paper trading)"
-          isDemo={isDemo}
+          label="Cash"
+          value={isLoading ? '…' : formatMoney(cash)}
+          hint="Available to trade"
         />
         <StatCard
           label="Portfolio Value"
-          value={formatMoney(demoBalance.portfolioValue)}
-          hint="Cash + holdings (DEMO)"
-          isDemo={isDemo}
+          value={isLoading ? '…' : formatMoney(portfolioValue)}
+          hint="Market value of positions"
         />
         <StatCard
-          label="Profit / Loss"
-          value={`${plSign}${formatMoney(demoBalance.profitLoss)}`}
-          hint={`${plSign}${demoBalance.profitLossPercent}% vs starting capital`}
-          tone={plTone}
-          isDemo={isDemo}
+          label="Total Value"
+          value={isLoading ? '…' : formatMoney(totalValue)}
+          hint="Cash + positions"
+        />
+        <StatCard
+          label="Total P&L"
+          value={isLoading ? '…' : formatSignedMoney(totalProfitLoss)}
+          hint={
+            isLoading
+              ? 'Unrealized, on positions held'
+              : `${formatSignedPercent(totalProfitLossPercent)} on cost · unrealized`
+          }
+          tone={isLoading ? undefined : toneOf(totalProfitLoss)}
         />
       </div>
 
-      <div className="page-grid page-grid--split">
-        <Card
-          title="Holdings"
-          action={isDemo ? <Badge variant="demo">DEMO</Badge> : null}
-        >
-          <Table
-            columns={holdingColumns}
-            rows={demoHoldings}
-            emptyMessage="No holdings yet."
-          />
-        </Card>
+      <Card title="Positions">
+        <Table
+          columns={holdingColumns}
+          rows={isLoading ? [] : holdings}
+          emptyMessage={isLoading ? 'Loading positions…' : 'No positions yet.'}
+        />
+      </Card>
 
-        <Card title="Portfolio value">
-          <ChartPlaceholder
-            title="Portfolio value over time"
-            description="Reserved for portfolio value chart. Charts will be added by the team."
-          />
-        </Card>
-      </div>
+      <Card title="Portfolio value">
+        <ChartPlaceholder
+          title="Portfolio value over time"
+          description="Reserved for portfolio value chart. Charts will be added by the team."
+        />
+      </Card>
 
       <Card
         title="Watchlist"
