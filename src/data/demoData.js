@@ -36,6 +36,38 @@ export const demoHoldings = [
   },
 ]
 
+/** DEMO watchlist stubs — not live market prices. */
+export const demoWatchlist = [
+  {
+    id: 'demo-watch-aapl',
+    symbol: 'AAPL',
+    company: 'Apple Inc.',
+    price: 190.0,
+    changePercent: 1.24,
+  },
+  {
+    id: 'demo-watch-msft',
+    symbol: 'MSFT',
+    company: 'Microsoft Corp.',
+    price: 420.15,
+    changePercent: -0.58,
+  },
+  {
+    id: 'demo-watch-nvda',
+    symbol: 'NVDA',
+    company: 'NVIDIA Corp.',
+    price: 875.3,
+    changePercent: 2.41,
+  },
+  {
+    id: 'demo-watch-amzn',
+    symbol: 'AMZN',
+    company: 'Amazon.com Inc.',
+    price: 178.9,
+    changePercent: 0.35,
+  },
+]
+
 export const demoTransactions = [
   {
     id: 'demo-tx-1',
