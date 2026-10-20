@@ -1,52 +1,31 @@
-import { demoWatchlist, isDemo } from '../data/demoData'
-import { supabase } from '../lib/supabase'
+import {
+  demoBalance,
+  demoHoldings,
+  demoWatchlist,
+  isDemo,
+} from '../data/demoData'
 import { demoDelay } from './delay'
 
 /**
- * Portfolio data access. Summary and holdings are real: the API aggregates
- * every trader owned by the signed-in user. The watchlist is still DEMO.
+ * Portfolio data access. Currently returns DEMO stubs.
+ * Swap implementations here when Supabase is ready — pages stay unchanged.
  */
-
-// Summary and holdings load together; share one request between them.
-let inflight = null
-
-async function fetchPortfolio() {
-  const { data } = (await supabase?.auth.getSession()) ?? {}
-  const token = data?.session?.access_token
-  if (!token) throw new Error('Sign in to see your portfolio.')
-
-  const res = await fetch('/api/portfolio', {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`)
-  return body
-}
-
-function loadPortfolio() {
-  inflight ??= fetchPortfolio().finally(() => {
-    inflight = null
-  })
-  return inflight
-}
-
 export async function getPortfolioSummary() {
-  const p = await loadPortfolio()
+  await demoDelay()
   return {
-    isDemo: false,
-    traderCount: p.traderCount,
-    cash: p.cash,
-    portfolioValue: p.portfolioValue,
-    profitLoss: p.profitLoss,
-    profitLossPercent: p.profitLossPercent,
+    isDemo,
+    cash: demoBalance.cash,
+    portfolioValue: demoBalance.portfolioValue,
+    profitLoss: demoBalance.profitLoss,
+    profitLossPercent: demoBalance.profitLossPercent,
   }
 }
 
 export async function getHoldings() {
-  const p = await loadPortfolio()
+  await demoDelay()
   return {
-    isDemo: false,
-    items: p.holdings,
+    isDemo,
+    items: [...demoHoldings],
   }
 }
 
