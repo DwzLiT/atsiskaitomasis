@@ -25,3 +25,6 @@ dist-ssr
 
 # Secrets / Environment variables
 .env
+
+# Claude Code local worktrees
+.claude/
