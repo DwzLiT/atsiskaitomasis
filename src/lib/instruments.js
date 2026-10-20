@@ -77,3 +77,40 @@ export async function upsertInstrumentPrice(symbol, company, price, changePercen
 
   return { ok: true, message: 'Kaina išsaugota duomenų bazėje.' }
 }
+
+/**
+ * Išsaugo dienos uždarymo kainas price_history lentelėje (per RPC),
+ * kad grafikas veiktų ir pasiekus Alpha Vantage limitą.
+ */
+export async function savePriceHistory(symbol, prices) {
+  if (!supabase || !symbol || !prices?.length) return
+
+  const { error } = await supabase.rpc('save_price_history', {
+    p_symbol: String(symbol).trim().toUpperCase(),
+    p_rows: prices.map((row) => ({ date: row.date, close: row.close })),
+  })
+
+  if (error) {
+    console.warn('savePriceHistory failed:', error.message)
+  }
+}
+
+/**
+ * Išsaugota dienos kainų istorija (seniausia -> naujausia).
+ */
+export async function getSavedPriceHistory(symbol) {
+  if (!supabase || !symbol) return []
+
+  const { data, error } = await supabase
+    .from('price_history')
+    .select('date, close')
+    .eq('symbol', String(symbol).trim().toUpperCase())
+    .order('date', { ascending: true })
+
+  if (error) {
+    console.warn('getSavedPriceHistory failed:', error.message)
+    return []
+  }
+
+  return (data ?? []).map((row) => ({ date: row.date, close: Number(row.close) }))
+}

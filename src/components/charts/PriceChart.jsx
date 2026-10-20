@@ -62,6 +62,11 @@ export default function PriceChart({ symbol }) {
             Alpha Vantage limitas pasiektas – rodoma demonstracinė kainų istorija.
           </p>
         ) : null}
+        {prices.data.source === 'saved' ? (
+          <p className="ui-note">
+            Alpha Vantage limitas pasiektas – rodoma išsaugota kainų istorija iš duomenų bazės.
+          </p>
+        ) : null}
       </>
     )
   }

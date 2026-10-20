@@ -1,6 +1,11 @@
 import { ApiError, getDailyPrices, getQuote } from '../api/alphaVantage'
 import { getDemoHistory, getDemoQuote } from './demoMarket'
-import { getSavedInstrument, upsertInstrumentPrice } from './instruments'
+import {
+  getSavedInstrument,
+  getSavedPriceHistory,
+  savePriceHistory,
+  upsertInstrumentPrice,
+} from './instruments'
 
 const FALLBACK_ERROR_TYPES = new Set(['limit', 'daily_limit', 'network', 'config', 'api'])
 
@@ -101,17 +106,26 @@ export async function resolveQuote(symbol, { company } = {}) {
 }
 
 /**
- * Dienos kainų istorija grafikui: Alpha Vantage, o jei nepasiekiamas –
- * demonstracinė istorija, kuri baigiasi paskutine žinoma kaina.
- * Grąžina { prices, source: 'live' | 'demo' }.
+ * Dienos kainų istorija grafikui: Alpha Vantage (išsaugoma Supabase),
+ * o jei nepasiekiamas – išsaugota istorija iš price_history, o jei jos
+ * nėra – demonstracinė istorija, kuri baigiasi paskutine žinoma kaina.
+ * Grąžina { prices, source: 'live' | 'saved' | 'demo' }.
  */
 export async function resolveDailyPrices(symbol) {
   const normalized = normalize(symbol)
 
   try {
-    return { prices: await getDailyPrices(normalized), source: 'live' }
+    const prices = await getDailyPrices(normalized)
+    // Nelaukiame – grafikas rodomas iškart, išsaugojimas vyksta fone
+    savePriceHistory(normalized, prices)
+    return { prices, source: 'live' }
   } catch (err) {
     if (!canUseFallback(err)) throw err
+
+    const history = await getSavedPriceHistory(normalized)
+    if (history.length >= 2) {
+      return { prices: history, source: 'saved' }
+    }
 
     const saved = await getSavedInstrument(normalized)
     const endPrice = saved?.price != null ? Number(saved.price) : getDemoQuote(normalized)?.price
