@@ -1,25 +1,23 @@
-import Card from '../components/ui/Card'
-import ChartPlaceholder from '../components/ui/ChartPlaceholder'
+import { useState } from 'react'
+import PriceChart from '../components/charts/PriceChart'
 import StockSearch from '../components/StockSearch'
 
-export default function Trade() {
+// `params` ({ symbol, company }) opens a stock directly, e.g. from the watchlist.
+export default function Trade({ params }) {
+  const [symbol, setSymbol] = useState(params?.symbol ?? null)
+
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Trade</h1>
-          <p>Search for a stock, then place a virtual BUY / SELL order.</p>
+          <h1>Prekyba</h1>
+          <p>Suraskite akciją ir pateikite virtualų pirkimo / pardavimo pavedimą.</p>
         </div>
       </div>
 
-      <StockSearch />
+      <StockSearch initialStock={params} onSelect={setSymbol} />
 
-      <Card title="Price chart">
-        <ChartPlaceholder
-          title="Selected symbol price"
-          description="Reserved for the selected stock price chart. Charts will be added by the team."
-        />
-      </Card>
+      <PriceChart symbol={symbol} />
     </div>
   )
 }

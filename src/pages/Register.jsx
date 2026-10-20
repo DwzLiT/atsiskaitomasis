@@ -3,6 +3,7 @@ import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import Input from '../components/ui/Input'
 import { supabase } from '../lib/supabase'
+import { toLithuanianError } from '../utils/errors'
 import '../styles/auth.css'
 
 const MIN_PASSWORD_LENGTH = 6
@@ -21,17 +22,17 @@ export default function Register({ onNavigate }) {
     setSuccess('')
 
     if (!supabase) {
-      setError('Registration is not available: Supabase is not configured.')
+      setError('Registruotis negalima: Supabase nesukonfigūruotas.')
       return
     }
 
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
+      setError(`Slaptažodis turi būti bent ${MIN_PASSWORD_LENGTH} simbolių.`)
       return
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.')
+      setError('Slaptažodžiai nesutampa.')
       return
     }
 
@@ -45,7 +46,7 @@ export default function Register({ onNavigate }) {
     setLoading(false)
 
     if (signUpError) {
-      setError(signUpError.message)
+      setError(toLithuanianError(signUpError.message))
       return
     }
 
@@ -56,26 +57,26 @@ export default function Register({ onNavigate }) {
 
     setPassword('')
     setConfirmPassword('')
-    setSuccess('Account created. Check your email to confirm your address, then log in.')
+    setSuccess('Paskyra sukurta. Patvirtinkite el. paštą paspaudę nuorodą laiške, tada prisijunkite.')
   }
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Register</h1>
-          <p>Create an account to save your paper trading portfolio.</p>
+          <h1>Registracija</h1>
+          <p>Susikurkite paskyrą, kad jūsų virtualus portfelis būtų išsaugotas.</p>
         </div>
       </div>
 
-      <Card title="Create account" className="auth-card">
+      <Card title="Sukurti paskyrą" className="auth-card">
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <Input
             id="register-email"
             name="email"
-            label="Email"
+            label="El. paštas"
             type="email"
-            placeholder="you@example.com"
+            placeholder="vardas@pastas.lt"
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -86,12 +87,12 @@ export default function Register({ onNavigate }) {
           <Input
             id="register-password"
             name="password"
-            label="Password"
+            label="Slaptažodis"
             type="password"
             autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+            hint={`Bent ${MIN_PASSWORD_LENGTH} simboliai.`}
             disabled={loading}
             required
           />
@@ -99,7 +100,7 @@ export default function Register({ onNavigate }) {
           <Input
             id="register-confirm-password"
             name="confirmPassword"
-            label="Confirm password"
+            label="Pakartokite slaptažodį"
             type="password"
             autoComplete="new-password"
             value={confirmPassword}
@@ -121,17 +122,17 @@ export default function Register({ onNavigate }) {
           ) : null}
 
           <Button type="submit" variant="primary" block disabled={loading}>
-            {loading ? 'Creating account…' : 'Register'}
+            {loading ? 'Kuriama paskyra…' : 'Registruotis'}
           </Button>
 
           <p className="auth-switch">
-            Already have an account?{' '}
+            Jau turite paskyrą?{' '}
             <button
               type="button"
               className="auth-switch__link"
               onClick={() => onNavigate('login')}
             >
-              Log in
+              Prisijungti
             </button>
           </p>
         </form>

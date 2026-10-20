@@ -1,16 +1,16 @@
 import Button from './Button'
 
 const DEFAULT_MESSAGES = {
-  loading: 'Loading…',
-  error: 'Something went wrong.',
-  empty: 'Nothing to show yet.',
+  loading: 'Kraunama…',
+  error: 'Įvyko klaida.',
+  empty: 'Kol kas nėra ką rodyti.',
 }
 
 export default function StatePanel({
   variant = 'empty',
   message,
   onRetry,
-  retryLabel = 'Retry',
+  retryLabel = 'Bandyti dar kartą',
 }) {
   return (
     <div className={`state-panel state-panel--${variant}`} role="status">

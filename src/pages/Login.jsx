@@ -3,17 +3,8 @@ import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import Input from '../components/ui/Input'
 import { supabase } from '../lib/supabase'
+import { toLithuanianError } from '../utils/errors'
 import '../styles/auth.css'
-
-function friendlyError(message) {
-  if (/email not confirmed/i.test(message)) {
-    return 'Please confirm your email first. Check your inbox for the link.'
-  }
-  if (/invalid login credentials/i.test(message)) {
-    return 'Wrong email or password.'
-  }
-  return message
-}
 
 export default function Login({ onNavigate }) {
   const [email, setEmail] = useState('')
@@ -26,12 +17,12 @@ export default function Login({ onNavigate }) {
     setError('')
 
     if (!supabase) {
-      setError('Login is not available: Supabase is not configured.')
+      setError('Prisijungti negalima: Supabase nesukonfigūruotas.')
       return
     }
 
     if (!email.trim() || !password) {
-      setError('Enter your email and password.')
+      setError('Įveskite el. paštą ir slaptažodį.')
       return
     }
 
@@ -45,7 +36,7 @@ export default function Login({ onNavigate }) {
     setLoading(false)
 
     if (signInError) {
-      setError(friendlyError(signInError.message))
+      setError(toLithuanianError(signInError.message))
       return
     }
 
@@ -56,19 +47,19 @@ export default function Login({ onNavigate }) {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Log in</h1>
-          <p>Sign in to your paper trading account.</p>
+          <h1>Prisijungimas</h1>
+          <p>Prisijunkite prie savo virtualios prekybos paskyros.</p>
         </div>
       </div>
 
-      <Card title="Welcome back" className="auth-card">
+      <Card title="Sveiki sugrįžę" className="auth-card">
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <Input
             id="login-email"
             name="email"
-            label="Email"
+            label="El. paštas"
             type="email"
-            placeholder="you@example.com"
+            placeholder="vardas@pastas.lt"
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -79,7 +70,7 @@ export default function Login({ onNavigate }) {
           <Input
             id="login-password"
             name="password"
-            label="Password"
+            label="Slaptažodis"
             type="password"
             autoComplete="current-password"
             value={password}
@@ -95,17 +86,17 @@ export default function Login({ onNavigate }) {
           ) : null}
 
           <Button type="submit" variant="primary" block disabled={loading}>
-            {loading ? 'Logging in…' : 'Log in'}
+            {loading ? 'Jungiamasi…' : 'Prisijungti'}
           </Button>
 
           <p className="auth-switch">
-            No account yet?{' '}
+            Neturite paskyros?{' '}
             <button
               type="button"
               className="auth-switch__link"
               onClick={() => onNavigate('register')}
             >
-              Register
+              Registruotis
             </button>
           </p>
         </form>

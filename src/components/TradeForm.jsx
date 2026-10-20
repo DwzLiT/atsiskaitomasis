@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { notifyPortfolioChanged } from '../lib/portfolioEvents'
 import { supabase } from '../lib/supabase'
 import useAuth from '../lib/useAuth'
+import { toLithuanianError } from '../utils/errors'
 import usePortfolio from '../lib/usePortfolio'
 import Button from './ui/Button'
 import Input from './ui/Input'
@@ -49,7 +50,7 @@ export default function TradeForm({ symbol, price }) {
     setSubmitting(false)
 
     if (error) {
-      setMessage({ type: 'error', text: error.message })
+      setMessage({ type: 'error', text: toLithuanianError(error.message) })
       return
     }
 
@@ -69,14 +70,14 @@ export default function TradeForm({ symbol, price }) {
           aria-pressed={side === 'BUY'}
           onClick={() => setSide('BUY')}
         >
-          BUY
+          Pirkti
         </Button>
         <Button
           variant={side === 'SELL' ? 'sell' : 'ghost'}
           aria-pressed={side === 'SELL'}
           onClick={() => setSide('SELL')}
         >
-          SELL
+          Parduoti
         </Button>
       </div>
 
@@ -109,7 +110,7 @@ export default function TradeForm({ symbol, price }) {
         variant={side === 'BUY' ? 'buy' : 'sell'}
         disabled={submitting || !user}
       >
-        {submitting ? 'Vykdoma...' : `${side} ${symbol}`}
+        {submitting ? 'Vykdoma...' : `${side === 'BUY' ? 'Pirkti' : 'Parduoti'} ${symbol}`}
       </Button>
 
       {message && (

@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
-import { getQuote, searchSymbols } from '../api/alphaVantage'
+import { getQuote } from '../api/alphaVantage'
 import { supabase } from '../lib/supabase'
+import useAuth from '../lib/useAuth'
+import useSymbolSearch from '../lib/useSymbolSearch'
+import useWatchlist from '../lib/useWatchlist'
 import TradeForm from './TradeForm'
+import Button from './ui/Button'
 import './StockSearch.css'
 
-const DEBOUNCE_MS = 500
-
 // Išsaugo kainą instruments lentelėje. Grąžina pranešimą vartotojui.
-async function saveInstrument(symbol, company, price) {
+async function saveInstrument(symbol, company, quote) {
   if (!supabase) return 'Kaina neišsaugota: Supabase nesukonfigūruotas.'
 
   const { error } = await supabase.rpc('upsert_instrument', {
     p_symbol: symbol,
     p_company: company,
-    p_price: price,
+    p_price: quote.price,
+    p_change_percent: quote.changePercent,
   })
 
   return error
@@ -21,40 +24,33 @@ async function saveInstrument(symbol, company, price) {
     : 'Kaina išsaugota duomenų bazėje.'
 }
 
-function StockSearch() {
+// Gauna kainą ir ją išsaugo. Grąžina { quote, message }.
+async function loadQuote(match) {
+  const quote = await getQuote(match.symbol)
+  const message = await saveInstrument(match.symbol, match.name, quote)
+  return { quote, message }
+}
+
+// `initialStock` ({ symbol, company }) opens a stock right away, e.g. from the
+// watchlist. `onSelect(symbol)` tells the page which stock is shown.
+function StockSearch({ initialStock, onSelect }) {
   const [query, setQuery] = useState('')
-  const [search, setSearch] = useState({ query: '', results: [], error: '' })
-  const [selected, setSelected] = useState(null)
+  const initialSymbol = initialStock?.symbol ?? ''
+  const initialName = initialStock?.company ?? ''
+  const [selected, setSelected] = useState(
+    initialSymbol ? { symbol: initialSymbol, name: initialName } : null,
+  )
   const [quote, setQuote] = useState(null)
   const [quoteError, setQuoteError] = useState('')
-  const [quoteLoading, setQuoteLoading] = useState(false)
+  const [quoteLoading, setQuoteLoading] = useState(Boolean(initialSymbol))
   const [saveMessage, setSaveMessage] = useState('')
-  const latestSymbol = useRef('')
+  const latestSymbol = useRef(initialSymbol)
+  const { user } = useAuth()
+  const watchlist = useWatchlist(user?.id)
+  const [watchMessage, setWatchMessage] = useState('')
 
-  const trimmed = query.trim()
-
-  // Ieško tik kai vartotojas ~500 ms nebespausdina
-  useEffect(() => {
-    if (!trimmed) return undefined
-
-    let cancelled = false
-    const timer = setTimeout(async () => {
-      try {
-        const results = await searchSymbols(trimmed)
-        if (!cancelled) setSearch({ query: trimmed, results, error: '' })
-      } catch (err) {
-        if (!cancelled) setSearch({ query: trimmed, results: [], error: err.message })
-      }
-    }, DEBOUNCE_MS)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [trimmed])
-
-  const isSearching = trimmed !== '' && search.query !== trimmed
-  const showResults = trimmed !== '' && search.query === trimmed
+  const search = useSymbolSearch(query)
+  const { isSearching, showResults } = search
 
   async function handleSelect(match) {
     latestSymbol.current = match.symbol
@@ -63,20 +59,57 @@ function StockSearch() {
     setQuote(null)
     setQuoteError('')
     setSaveMessage('')
+    setWatchMessage('')
     setQuoteLoading(true)
+    onSelect?.(match.symbol)
 
     try {
-      const result = await getQuote(match.symbol)
+      const { quote: result, message } = await loadQuote(match)
       if (latestSymbol.current !== match.symbol) return
       setQuote(result)
-      const message = await saveInstrument(match.symbol, match.name, result.price)
-      if (latestSymbol.current === match.symbol) setSaveMessage(message)
+      setSaveMessage(message)
     } catch (err) {
       if (latestSymbol.current === match.symbol) setQuoteError(err.message)
     } finally {
       if (latestSymbol.current === match.symbol) setQuoteLoading(false)
     }
   }
+
+  // Atidaro akciją iš karto, jei ji perduota (pvz. iš stebimų sąrašo)
+  useEffect(() => {
+    if (!initialSymbol) return undefined
+
+    let cancelled = false
+    loadQuote({ symbol: initialSymbol, name: initialName })
+      .then(({ quote: result, message }) => {
+        if (cancelled || latestSymbol.current !== initialSymbol) return
+        setQuote(result)
+        setSaveMessage(message)
+      })
+      .catch((err) => {
+        if (!cancelled && latestSymbol.current === initialSymbol) setQuoteError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled && latestSymbol.current === initialSymbol) setQuoteLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [initialSymbol, initialName])
+
+  async function handleAddToWatchlist() {
+    setWatchMessage('')
+    try {
+      await watchlist.add(selected.symbol, selected.name || null)
+      setWatchMessage('Pridėta prie stebimų.')
+    } catch (err) {
+      setWatchMessage(err.message)
+    }
+  }
+
+  const inWatchlist =
+    selected && watchlist.items.some((item) => item.symbol === selected.symbol)
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -141,6 +174,20 @@ function StockSearch() {
           )}
 
           {saveMessage && <span className="stock-date">{saveMessage}</span>}
+
+          {quote && user && (
+            <div className="stock-watch">
+              <Button
+                variant="ghost"
+                className="btn--compact"
+                disabled={inWatchlist || watchlist.loading}
+                onClick={handleAddToWatchlist}
+              >
+                {inWatchlist ? '★ Stebimų sąraše' : '☆ Pridėti prie stebimų'}
+              </Button>
+              {watchMessage && <span className="stock-date">{watchMessage}</span>}
+            </div>
+          )}
 
           {quote && <TradeForm key={quote.symbol} symbol={quote.symbol} price={quote.price} />}
         </div>
