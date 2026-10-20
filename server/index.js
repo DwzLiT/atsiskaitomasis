@@ -70,46 +70,44 @@ app.get('/api/trusted', wrap(async (req, res) => {
   const user = await requireUser(req, res, 'Sign in to manage your traders')
   if (!user) return
   const [traders, trusted] = await Promise.all([
-    supabase.from('traders').select('id, name, user_id').order('created_at'),
+    supabase.from('traders').select('id, name, user_id').order('name'),
     supabase.from('trusted_traders').select('trader_id').eq('user_id', user.id),
   ])
   if (traders.error) throw traders.error
   if (trusted.error) throw trusted.error
   const trustedIds = new Set(trusted.data.map((r) => r.trader_id))
-  res.json(traders.data.map((t) => {
-    const own = t.user_id === user.id
-    return { id: t.id, name: t.name, own, selected: own || trustedIds.has(t.id) }
-  }))
+  res.json(traders.data
+    .map((t) => {
+      const own = t.user_id === user.id
+      return { id: t.id, name: t.name, own, selected: own || trustedIds.has(t.id) }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)))
 }))
 
-// Replaces the traders the user trusts. Owned traders are always trusted, so
-// they are ignored here.
-app.put('/api/trusted', wrap(async (req, res) => {
+// Trust (trusted: true) or stop trusting (trusted: false) one trader. Owned
+// traders are always trusted, so changing them is rejected.
+app.put('/api/trusted/:traderId', wrap(async (req, res) => {
   const user = await requireUser(req, res, 'Sign in to manage your traders')
   if (!user) return
-  const requested = req.body?.trader_ids
-  if (!Array.isArray(requested) || requested.some((id) => typeof id !== 'string')) {
-    return res.status(400).json({ error: 'trader_ids must be an array of trader ids' })
+  const trusted = req.body?.trusted
+  if (typeof trusted !== 'boolean') {
+    return res.status(400).json({ error: 'trusted must be true or false' })
   }
 
-  const { data: known, error: knownError } = await supabase
-    .from('traders').select('id, user_id').in('id', requested)
-  if (knownError) throw knownError
-  if (known.length !== new Set(requested).size) {
-    return res.status(400).json({ error: 'unknown trader in trader_ids' })
+  const { data: trader, error: traderError } = await supabase
+    .from('traders').select('id, user_id').eq('id', req.params.traderId).maybeSingle()
+  if (traderError) throw traderError
+  if (!trader) return res.status(404).json({ error: 'trader not found' })
+  if (trader.user_id === user.id) {
+    return res.status(400).json({ error: 'You always trust your own trader' })
   }
-  const rows = known
-    .filter((t) => t.user_id !== user.id)
-    .map((t) => ({ user_id: user.id, trader_id: t.id }))
 
-  const { error: deleteError } = await supabase
-    .from('trusted_traders').delete().eq('user_id', user.id)
-  if (deleteError) throw deleteError
-  if (rows.length > 0) {
-    const { error: insertError } = await supabase.from('trusted_traders').insert(rows)
-    if (insertError) throw insertError
-  }
-  res.json({ trader_ids: rows.map((r) => r.trader_id) })
+  const row = { user_id: user.id, trader_id: trader.id }
+  const { error } = trusted
+    ? await supabase.from('trusted_traders').upsert(row)
+    : await supabase.from('trusted_traders').delete().match(row)
+  if (error) throw error
+  res.json({ trader_id: trader.id, trusted })
 }))
 
 app.get('/api/traders', wrap(async (req, res) => {

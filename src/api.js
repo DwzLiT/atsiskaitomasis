@@ -25,6 +25,6 @@ export const api = {
   placeTicket: (ticket) =>
     request('/tickets', { method: 'POST', body: JSON.stringify(ticket) }),
   assignableTraders: () => request('/trusted'),
-  saveAssignedTraders: (traderIds) =>
-    request('/trusted', { method: 'PUT', body: JSON.stringify({ trader_ids: traderIds }) }),
+  setTraderTrusted: (traderId, trusted) =>
+    request(`/trusted/${traderId}`, { method: 'PUT', body: JSON.stringify({ trusted }) }),
 }
