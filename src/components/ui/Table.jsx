@@ -1,4 +1,4 @@
-export default function Table({ columns, rows, emptyMessage = 'No data yet.' }) {
+export default function Table({ columns, rows, emptyMessage = 'Duomenų dar nėra.' }) {
   return (
     <div className="table-wrap">
       <table className="table">

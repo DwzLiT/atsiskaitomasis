@@ -19,23 +19,30 @@ const PAGES = {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('portfolio')
+  // params lets one page open another with context, e.g. a watchlist
+  // symbol opened on Trade.
+  const [route, setRoute] = useState({ page: 'portfolio', params: null, key: 0 })
   const { user } = useAuth()
+  const currentPage = route.page
   const Page = PAGES[currentPage] ?? Portfolio
+
+  function navigate(page, params = null) {
+    setRoute((prev) => ({ page, params, key: prev.key + 1 }))
+  }
 
   async function handleSignOut() {
     await supabase?.auth.signOut()
-    setCurrentPage('login')
+    navigate('login')
   }
 
   return (
     <Layout
       currentPage={currentPage}
-      onNavigate={setCurrentPage}
+      onNavigate={navigate}
       user={user}
       onSignOut={handleSignOut}
     >
-      <Page onNavigate={setCurrentPage} />
+      <Page key={route.key} onNavigate={navigate} params={route.params} />
     </Layout>
   )
 }

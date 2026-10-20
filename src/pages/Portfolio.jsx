@@ -1,21 +1,18 @@
 import { useState } from 'react'
-import Badge from '../components/ui/Badge'
+import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
-import ChartPlaceholder from '../components/ui/ChartPlaceholder'
-import Input from '../components/ui/Input'
 import StatCard from '../components/ui/StatCard'
 import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
 import useAuth from '../lib/useAuth'
+import { notifyPortfolioChanged } from '../lib/portfolioEvents'
 import usePortfolio from '../lib/usePortfolio'
-import useResource from '../hooks/useResource'
-import { getWatchlist } from '../services/portfolioService'
-import { formatChange, formatMoney } from '../utils/format'
-
-function formatSignedMoney(value) {
-  return `${value > 0 ? '+' : ''}${formatMoney(value)}`
-}
+import { refreshQuotes } from '../lib/quotes'
+import { supabase } from '../lib/supabase'
+import useSnapshots from '../lib/useSnapshots'
+import Watchlist from '../components/Watchlist'
+import { formatDateTime, formatMoney, formatSignedMoney } from '../utils/format'
 
 function formatSignedPercent(value) {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
@@ -48,40 +45,41 @@ function toHoldings(positions) {
       marketValue,
       profitLoss,
       profitLossPercent: costBasis > 0 ? (profitLoss / costBasis) * 100 : 0,
+      updatedAt: position.instruments?.updated_at ?? null,
     }
   })
 }
 
 const holdingColumns = [
-  { key: 'symbol', label: 'Symbol' },
-  { key: 'company', label: 'Company' },
+  { key: 'symbol', label: 'Simbolis' },
+  { key: 'company', label: 'Įmonė' },
   {
     key: 'shares',
-    label: 'Shares',
+    label: 'Kiekis',
     align: 'right',
     render: (row) => row.shares,
   },
   {
     key: 'avgCost',
-    label: 'Avg Cost',
+    label: 'Vid. kaina',
     align: 'right',
     render: (row) => formatMoney(row.avgCost),
   },
   {
     key: 'price',
-    label: 'Price',
+    label: 'Kaina',
     align: 'right',
     render: (row) => (row.price == null ? '—' : formatMoney(row.price)),
   },
   {
     key: 'marketValue',
-    label: 'Market Value',
+    label: 'Rinkos vertė',
     align: 'right',
     render: (row) => formatMoney(row.marketValue),
   },
   {
     key: 'profitLoss',
-    label: 'P&L ($)',
+    label: 'P/N ($)',
     align: 'right',
     render: (row) => (
       <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
@@ -91,7 +89,7 @@ const holdingColumns = [
   },
   {
     key: 'profitLossPercent',
-    label: 'P&L (%)',
+    label: 'P/N (%)',
     align: 'right',
     render: (row) => (
       <span className={`mono ${toneOf(row.profitLoss)}`.trim()}>
@@ -101,14 +99,12 @@ const holdingColumns = [
   },
 ]
 
-export default function Portfolio() {
+export default function Portfolio({ onNavigate }) {
   const { user, loading: authLoading } = useAuth()
   const { trader, positions, loading, error, reload } = usePortfolio(user?.id)
-  const watchlistResource = useResource(getWatchlist)
-
-  /** Local UI-only edits; null means show server/DEMO payload as-is. */
-  const [watchlistOverride, setWatchlistOverride] = useState(null)
-  const [watchSymbol, setWatchSymbol] = useState('')
+  const history = useSnapshots(user?.id, { record: true })
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMessage, setRefreshMessage] = useState(null)
 
   const holdings = toHoldings(positions)
   const cash = Number(trader?.cash_balance ?? 0)
@@ -120,235 +116,137 @@ export default function Portfolio() {
     totalCost > 0 ? (totalProfitLoss / totalCost) * 100 : 0
   const isLoading = authLoading || loading
 
-  const watchlist =
-    watchlistOverride ??
-    (watchlistResource.status === 'success'
-      ? watchlistResource.data.items
-      : [])
+  // The oldest price among positions, so "updated" is never overstated.
+  const pricesUpdatedAt = holdings
+    .map((row) => row.updatedAt)
+    .filter(Boolean)
+    .sort()[0]
 
-  function handleAddToWatchlist(event) {
-    event.preventDefault()
-    const symbol = watchSymbol.trim().toUpperCase()
-    if (!symbol) return
-    if (watchlist.some((item) => item.symbol === symbol)) {
-      setWatchSymbol('')
-      return
+  // Fetches fresh quotes for every position, then reloads cash, positions and
+  // the charts. A snapshot is saved too (at most one per hour, see the DB).
+  async function handleRefreshPrices() {
+    setRefreshing(true)
+    setRefreshMessage(null)
+    try {
+      await refreshQuotes(holdings.map((row) => row.symbol))
+      await supabase.rpc('record_snapshot')
+      setRefreshMessage({ type: 'success', text: 'Kainos atnaujintos.' })
+    } catch (err) {
+      setRefreshMessage({ type: 'error', text: err.message })
+    } finally {
+      setRefreshing(false)
+      notifyPortfolioChanged()
     }
-
-    setWatchlistOverride([
-      ...watchlist,
-      {
-        id: `demo-watch-${symbol.toLowerCase()}-${Date.now()}`,
-        symbol,
-        company: 'DEMO · Pending',
-        price: null,
-        changePercent: null,
-      },
-    ])
-    setWatchSymbol('')
   }
-
-  function handleRemoveFromWatchlist(id) {
-    setWatchlistOverride(watchlist.filter((item) => item.id !== id))
-  }
-
-  function handleRetryWatchlist() {
-    setWatchlistOverride(null)
-    watchlistResource.reload()
-  }
-
-  const watchlistColumns = [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'company', label: 'Company' },
-    {
-      key: 'price',
-      label: 'Price',
-      align: 'right',
-      render: (row) =>
-        row.price == null ? '— · DEMO' : formatMoney(row.price),
-    },
-    {
-      key: 'changePercent',
-      label: 'Change (%)',
-      align: 'right',
-      render: (row) => {
-        if (row.changePercent == null) {
-          return <span className="mono">— · DEMO</span>
-        }
-        return (
-          <span className={`mono ${toneOf(row.changePercent)}`.trim()}>
-            {formatChange(row.changePercent)}
-          </span>
-        )
-      },
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      align: 'right',
-      render: (row) => (
-        <Button
-          variant="ghost"
-          type="button"
-          className="btn--compact"
-          onClick={() => handleRemoveFromWatchlist(row.id)}
-          title="UI-only remove — not saved to a database"
-        >
-          Remove
-        </Button>
-      ),
-    },
-  ]
 
   function renderHoldingsBody() {
     if (isLoading) {
-      return <StatePanel variant="loading" message="Loading positions…" />
+      return <StatePanel variant="loading" message="Kraunamos pozicijos…" />
     }
     if (error) {
       return (
         <StatePanel
           variant="error"
-          message={typeof error === 'string' ? error : 'Failed to load positions.'}
+          message={typeof error === 'string' ? error : 'Nepavyko įkelti pozicijų.'}
           onRetry={reload}
         />
       )
     }
     if (holdings.length === 0) {
-      return <StatePanel variant="empty" message="No positions yet." />
+      return <StatePanel variant="empty" message="Pozicijų dar nėra." />
     }
     return (
       <Table
         columns={holdingColumns}
         rows={holdings}
-        emptyMessage="No positions yet."
+        emptyMessage="Pozicijų dar nėra."
       />
     )
-  }
-
-  function renderWatchlistBody() {
-    if (watchlistResource.status === 'loading') {
-      return <StatePanel variant="loading" message="Loading watchlist…" />
-    }
-    if (watchlistResource.status === 'error') {
-      return (
-        <StatePanel
-          variant="error"
-          message={
-            watchlistResource.error?.message || 'Failed to load watchlist.'
-          }
-          onRetry={handleRetryWatchlist}
-        />
-      )
-    }
-    if (watchlistResource.status === 'success' && watchlist.length === 0) {
-      return (
-        <StatePanel
-          variant="empty"
-          message="Watchlist is empty. Add a symbol above."
-        />
-      )
-    }
-    if (watchlistResource.status === 'success') {
-      return (
-        <Table
-          columns={watchlistColumns}
-          rows={watchlist}
-          emptyMessage="Watchlist is empty. Add a symbol above."
-        />
-      )
-    }
-    return null
   }
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>Portfolio</h1>
-          <p>Virtual balance, holdings, and portfolio overview.</p>
+          <h1>Portfelis</h1>
+          <p>Virtualus balansas, turimos akcijos ir portfelio apžvalga.</p>
         </div>
       </div>
 
       {!authLoading && !user ? (
         <p className="auth-message auth-message--error" role="alert">
-          Log in to see your portfolio.
+          Prisijunkite, kad matytumėte savo portfelį.
         </p>
       ) : null}
 
       <div className="page-grid page-grid--stats page-grid--stats-4">
         <StatCard
-          label="Cash"
+          label="Pinigai"
           value={isLoading ? '…' : formatMoney(cash)}
-          hint="Available to trade"
+          hint="Galima prekiauti"
         />
         <StatCard
-          label="Portfolio Value"
+          label="Portfelio vertė"
           value={isLoading ? '…' : formatMoney(portfolioValue)}
-          hint="Market value of positions"
+          hint="Pozicijų rinkos vertė"
         />
         <StatCard
-          label="Total Value"
+          label="Bendra vertė"
           value={isLoading ? '…' : formatMoney(totalValue)}
-          hint="Cash + positions"
+          hint="Pinigai + pozicijos"
         />
         <StatCard
-          label="Total P&L"
+          label="Bendras pelnas / nuostolis"
           value={isLoading ? '…' : formatSignedMoney(totalProfitLoss)}
           hint={
             isLoading
-              ? 'Unrealized, on positions held'
-              : `${formatSignedPercent(totalProfitLossPercent)} on cost · unrealized`
+              ? 'Nerealizuotas, turimų pozicijų'
+              : `${formatSignedPercent(totalProfitLossPercent)} nuo kainos · nerealizuotas`
           }
           tone={isLoading ? undefined : toneOf(totalProfitLoss)}
         />
       </div>
 
-      <Card title="Positions">{renderHoldingsBody()}</Card>
-
-      <Card title="Portfolio value">
-        <ChartPlaceholder
-          title="Portfolio value over time"
-          description="Reserved for portfolio value chart. Charts will be added by the team."
-        />
-      </Card>
-
       <Card
-        title="Watchlist"
+        title="Pozicijos"
         action={
-          watchlistResource.data?.isDemo ? (
-            <Badge variant="demo">DEMO · UI only</Badge>
+          user && holdings.length > 0 ? (
+            <div className="card-action">
+              <span className="card-action__meta">
+                Kainos atnaujintos: {formatDateTime(pricesUpdatedAt)}
+              </span>
+              <Button
+                variant="ghost"
+                className="btn--compact"
+                disabled={refreshing}
+                onClick={handleRefreshPrices}
+              >
+                {refreshing ? 'Atnaujinama…' : 'Atnaujinti kainas'}
+              </Button>
+            </div>
           ) : null
         }
       >
-        <form className="watchlist-form" onSubmit={handleAddToWatchlist}>
-          <Input
-            id="watch-symbol"
-            name="watchSymbol"
-            label="Stock symbol"
-            placeholder="e.g. GOOGL"
-            value={watchSymbol}
-            onChange={(event) => setWatchSymbol(event.target.value)}
-            autoComplete="off"
-            disabled={watchlistResource.status !== 'success'}
-          />
-          <div className="watchlist-form__action">
-            <Button
-              variant="primary"
-              type="submit"
-              disabled={watchlistResource.status !== 'success'}
-            >
-              Add to Watchlist
-            </Button>
-          </div>
-        </form>
-
-        {renderWatchlistBody()}
-
-        <p className="ui-note watchlist-note">
-          Add / Remove are UI-only. Changes stay in this session and are not
-          saved to a database. Prices are DEMO stubs, not live market data.
-        </p>
+        {refreshMessage ? (
+          <p className={`auth-message auth-message--${refreshMessage.type}`} role="alert">
+            {refreshMessage.text}
+          </p>
+        ) : null}
+        {renderHoldingsBody()}
       </Card>
+
+      <PortfolioValueChart
+        user={user}
+        snapshots={history.snapshots}
+        loading={isLoading || history.loading}
+        error={history.error}
+        currentValue={isLoading || error ? null : totalValue}
+      />
+
+      <Watchlist
+        user={user}
+        onOpen={(symbol, company) => onNavigate('trade', { symbol, company })}
+      />
     </div>
   )
 }
