@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
-import { getDailyPrices } from '../../api/alphaVantage'
 import useResource from '../../hooks/useResource'
+import { resolveDailyPrices } from '../../lib/resolveQuote'
 import { filterByDays } from '../../utils/chart'
 import { formatChange, formatCompactMoney, formatMoney } from '../../utils/format'
 import Card from '../ui/Card'
@@ -15,14 +15,15 @@ const RANGES = [
 ]
 
 // Daily closing prices of the selected stock (TIME_SERIES_DAILY, ~100 days).
+// Falls back to a demo history when the API limit is reached.
 export default function PriceChart({ symbol }) {
   const [range, setRange] = useState('3M')
-  const loader = useCallback(() => getDailyPrices(symbol), [symbol])
+  const loader = useCallback(() => resolveDailyPrices(symbol), [symbol])
   const prices = useResource(loader, { enabled: Boolean(symbol) })
 
   const points =
     prices.status === 'success'
-      ? prices.data.map((row) => ({ t: new Date(`${row.date}T00:00`).getTime(), value: row.close }))
+      ? prices.data.prices.map((row) => ({ t: new Date(`${row.date}T00:00`).getTime(), value: row.close }))
       : []
   const visible = filterByDays(points, RANGES.find((r) => r.id === range).days)
   const first = visible[0]?.value
@@ -56,6 +57,16 @@ export default function PriceChart({ symbol }) {
           formatAxis={formatCompactMoney}
           ariaLabel={`${symbol} dienos uždarymo kaina`}
         />
+        {prices.data.source === 'demo' ? (
+          <p className="ui-note">
+            Alpha Vantage limitas pasiektas – rodoma demonstracinė kainų istorija.
+          </p>
+        ) : null}
+        {prices.data.source === 'saved' ? (
+          <p className="ui-note">
+            Alpha Vantage limitas pasiektas – rodoma išsaugota kainų istorija iš duomenų bazės.
+          </p>
+        ) : null}
       </>
     )
   }

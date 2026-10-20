@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { ApiError, searchSymbols } from '../api/alphaVantage'
+import { searchSymbols } from '../api/alphaVantage'
+import { searchDemoStocks } from './demoMarket'
 import { searchSavedInstruments } from './instruments'
+import { canUseFallback } from './resolveQuote'
 
 const DEBOUNCE_MS = 500
 
-// Klaidos, kurioms esant ieškome išsaugotose akcijose (pvz. pasiektas limitas)
-const FALLBACK_ERROR_TYPES = new Set(['limit', 'daily_limit', 'network', 'config', 'api'])
-
 // Alpha Vantage SYMBOL_SEARCH for `query`, run ~500 ms after typing stops.
-// If the API is unavailable, falls back to stocks saved in instruments.
+// If the API is unavailable, falls back to stocks saved in instruments plus
+// the built-in demo list (saved ones first, no duplicates).
 // Shared by the Trade search and the watchlist input.
 export default function useSymbolSearch(query) {
   const [search, setSearch] = useState({ query: '', results: [], error: '', fromSaved: false })
@@ -25,10 +25,13 @@ export default function useSymbolSearch(query) {
       } catch (err) {
         if (cancelled) return
 
-        if (err instanceof ApiError && FALLBACK_ERROR_TYPES.has(err.type)) {
+        if (canUseFallback(err)) {
           const saved = await searchSavedInstruments(trimmed)
-          if (!cancelled && saved.length > 0) {
-            setSearch({ query: trimmed, results: saved, error: '', fromSaved: true })
+          const savedSymbols = new Set(saved.map((match) => match.symbol))
+          const demo = searchDemoStocks(trimmed).filter((match) => !savedSymbols.has(match.symbol))
+          const results = [...saved, ...demo].slice(0, 10)
+          if (!cancelled && results.length > 0) {
+            setSearch({ query: trimmed, results, error: '', fromSaved: true })
             return
           }
         }

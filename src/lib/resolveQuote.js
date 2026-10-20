@@ -1,23 +1,35 @@
-import { ApiError, getQuote } from '../api/alphaVantage'
-import { getSavedInstrument, upsertInstrumentPrice } from './instruments'
+import { ApiError, getDailyPrices, getQuote } from '../api/alphaVantage'
+import { getDemoHistory, getDemoQuote } from './demoMarket'
+import {
+  getSavedInstrument,
+  getSavedPriceHistory,
+  savePriceHistory,
+  upsertInstrumentPrice,
+} from './instruments'
 
 const FALLBACK_ERROR_TYPES = new Set(['limit', 'daily_limit', 'network', 'config', 'api'])
 
-function canUseSavedPrice(err) {
+export function canUseFallback(err) {
   return err instanceof ApiError && FALLBACK_ERROR_TYPES.has(err.type)
+}
+
+function normalize(symbol) {
+  return String(symbol || '')
+    .trim()
+    .toUpperCase()
 }
 
 /**
  * 1) Bando Alpha Vantage kainą.
  * 2) Jei limitas / tinklas / API nepasiekiamas — naudoja instruments.
- * 3) Jei nėra nė vienur — aiški klaida (kainos neišgalvoja).
+ * 3) Jei ten nėra — demonstracinę kainą (demoMarket.js), kuri išsaugoma,
+ *    kad su ja būtų galima prekiauti ir pridėti prie stebimų.
+ * 4) Jei nėra nė vienur — aiški klaida.
  *
- * Sėkmingą API kainą išsaugo per upsert_instrument.
+ * source: 'live' | 'saved' | 'demo'
  */
 export async function resolveQuote(symbol, { company } = {}) {
-  const normalized = String(symbol || '')
-    .trim()
-    .toUpperCase()
+  const normalized = normalize(symbol)
 
   if (!normalized) {
     throw new ApiError('Simbolis privalomas', 'not_found')
@@ -45,31 +57,83 @@ export async function resolveQuote(symbol, { company } = {}) {
       saveMessage: save.message,
     }
   } catch (err) {
-    if (!canUseSavedPrice(err)) {
+    if (!canUseFallback(err)) {
       throw err
     }
 
     const saved = await getSavedInstrument(normalized)
     const price = saved?.price != null ? Number(saved.price) : NaN
 
-    if (!saved || !Number.isFinite(price) || price <= 0) {
-      throw new ApiError(
-        `Akcijos „${normalized}“ kaina nepasiekiama. Alpha Vantage šiuo metu neveikia (arba pasiektas limitas), o šios akcijos nėra išsaugotoje instruments lentelėje.`,
-        'unavailable',
-      )
+    if (saved && Number.isFinite(price) && price > 0) {
+      return {
+        symbol: saved.symbol || normalized,
+        price,
+        change: null,
+        changePercent: saved.change_percent == null ? null : Number(saved.change_percent),
+        date: null,
+        company: saved.company || company || normalized,
+        source: 'saved',
+        updatedAt: saved.updated_at || null,
+        saveMessage: '',
+        fallbackReason: err.message,
+      }
     }
 
-    return {
-      symbol: saved.symbol || normalized,
-      price,
-      change: null,
-      changePercent: saved.change_percent == null ? null : Number(saved.change_percent),
-      date: null,
-      company: saved.company || company || normalized,
-      source: 'saved',
-      updatedAt: saved.updated_at || null,
-      saveMessage: '',
-      fallbackReason: err.message,
+    const demo = getDemoQuote(normalized)
+    if (demo) {
+      // Išsaugome, nes place_ticket ir add_to_watchlist ima kainą iš instruments
+      const save = await upsertInstrumentPrice(
+        normalized,
+        company || demo.company,
+        demo.price,
+        demo.changePercent,
+      )
+      return {
+        ...demo,
+        company: company || demo.company,
+        source: 'demo',
+        updatedAt: new Date().toISOString(),
+        saveMessage: save.ok ? '' : save.message,
+        fallbackReason: err.message,
+      }
     }
+
+    throw new ApiError(
+      `Akcijos „${normalized}“ kaina nepasiekiama. Alpha Vantage šiuo metu neveikia (arba pasiektas limitas), o šios akcijos nėra nei išsaugotų, nei demonstracinių sąraše.`,
+      'unavailable',
+    )
+  }
+}
+
+/**
+ * Dienos kainų istorija grafikui: Alpha Vantage (išsaugoma Supabase),
+ * o jei nepasiekiamas – išsaugota istorija iš price_history, o jei jos
+ * nėra – demonstracinė istorija, kuri baigiasi paskutine žinoma kaina.
+ * Grąžina { prices, source: 'live' | 'saved' | 'demo' }.
+ */
+export async function resolveDailyPrices(symbol) {
+  const normalized = normalize(symbol)
+
+  try {
+    const prices = await getDailyPrices(normalized)
+    // Nelaukiame – grafikas rodomas iškart, išsaugojimas vyksta fone
+    savePriceHistory(normalized, prices)
+    return { prices, source: 'live' }
+  } catch (err) {
+    if (!canUseFallback(err)) throw err
+
+    const history = await getSavedPriceHistory(normalized)
+    if (history.length >= 2) {
+      return { prices: history, source: 'saved' }
+    }
+
+    const saved = await getSavedInstrument(normalized)
+    const endPrice = saved?.price != null ? Number(saved.price) : getDemoQuote(normalized)?.price
+    const prices = getDemoHistory(normalized, endPrice)
+
+    if (prices.length === 0) {
+      throw new ApiError(`Nėra kainų duomenų akcijai „${normalized}“`, 'unavailable')
+    }
+    return { prices, source: 'demo' }
   }
 }

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getQuote, searchSymbols } from '../api/alphaVantage'
+import { searchSymbols } from '../api/alphaVantage'
 import { toLithuanianError } from '../utils/errors'
-import { refreshQuotes, saveQuote } from './quotes'
+import { getDemoCompany } from './demoMarket'
+import { refreshQuotes } from './quotes'
+import { resolveQuote } from './resolveQuote'
 import { supabase } from './supabase'
 
 const EMPTY = { userId: null, items: [], error: '' }
@@ -40,6 +42,9 @@ async function lookupCompany(symbol) {
     .maybeSingle()
   if (data) return null // keep the stored name
 
+  const demoName = getDemoCompany(symbol)
+  if (demoName) return demoName
+
   try {
     const matches = await searchSymbols(symbol)
     return matches.find((m) => m.symbol.toUpperCase() === symbol)?.name ?? null
@@ -71,14 +76,14 @@ export default function useWatchlist(userId) {
     }
   }, [userId])
 
-  // Validates the symbol with a live quote, stores the price, then adds it.
+  // Validates the symbol with a quote (live, saved or demo – resolveQuote
+  // stores it in instruments), then adds it.
   // `company` is optional (known when adding from search results).
   async function add(rawSymbol, company = null) {
     const symbol = rawSymbol.trim().toUpperCase()
     if (!symbol) return
-    const quote = await getQuote(symbol)
     const name = company ?? (await lookupCompany(symbol))
-    await saveQuote(symbol, name, quote)
+    await resolveQuote(symbol, { company: name })
 
     const { error } = await supabase.rpc('add_to_watchlist', { p_symbol: symbol })
     if (error) throw new Error(toLithuanianError(error.message))
@@ -94,7 +99,7 @@ export default function useWatchlist(userId) {
   async function refreshPrices() {
     const items = state.userId === userId ? state.items : []
     try {
-      await refreshQuotes(items.map((item) => item.symbol))
+      return await refreshQuotes(items.map((item) => item.symbol))
     } finally {
       await reload()
     }

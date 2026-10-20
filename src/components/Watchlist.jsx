@@ -28,8 +28,9 @@ export default function Watchlist({ user, onOpen }) {
     setBusy(true)
     setMessage(null)
     try {
-      await action()
-      if (success) setMessage({ type: 'success', text: success })
+      const result = await action()
+      const text = typeof success === 'function' ? success(result) : success
+      if (text) setMessage({ type: 'success', text })
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
@@ -189,7 +190,7 @@ export default function Watchlist({ user, onOpen }) {
             variant="ghost"
             className="btn--compact"
             disabled={busy}
-            onClick={() => run(refreshPrices, 'Kainos atnaujintos.')}
+            onClick={() => run(refreshPrices, (text) => text)}
           >
             {busy ? 'Vykdoma…' : 'Atnaujinti kainas'}
           </Button>
@@ -239,7 +240,8 @@ export default function Watchlist({ user, onOpen }) {
       <p className="ui-note watchlist-note">
         Kainos gaunamos iš Alpha Vantage (nemokamas planas – apie 25 užklausos
         per dieną), todėl jos atnaujinamos paspaudus „Atnaujinti kainas“,
-        ieškant akcijos arba prekiaujant.
+        ieškant akcijos arba prekiaujant. Pasiekus limitą rodomos paskutinės
+        išsaugotos arba demonstracinės kainos.
       </p>
     </Card>
   )
