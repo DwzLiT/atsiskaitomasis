@@ -1,27 +1,21 @@
-import { useEffect, useState } from 'react'
-import { api } from '../api'
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
 import ChartPlaceholder from '../components/ui/ChartPlaceholder'
+import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
-
-function formatMoney(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
+import useAuth from '../lib/useAuth'
+import useTickets from '../lib/useTickets'
+import { formatMoney } from '../utils/format'
 
 const transactionColumns = [
   {
-    key: 'type',
+    key: 'side',
     label: 'Type',
     render: (row) => (
       <Badge variant={row.side === 'BUY' ? 'buy' : 'sell'}>{row.side}</Badge>
     ),
   },
   { key: 'symbol', label: 'Symbol' },
-  { key: 'trader_name', label: 'Trader' },
   {
     key: 'quantity',
     label: 'Quantity',
@@ -32,33 +26,50 @@ const transactionColumns = [
     key: 'price',
     label: 'Price',
     align: 'right',
-    render: (row) => formatMoney(row.price),
+    render: (row) => formatMoney(Number(row.price)),
   },
   {
     key: 'total',
     label: 'Total',
     align: 'right',
-    render: (row) => formatMoney(row.price * row.quantity),
+    render: (row) => formatMoney(Number(row.price) * Number(row.quantity)),
   },
+  { key: 'status', label: 'Status' },
   {
-    key: 'date',
+    key: 'created_at',
     label: 'Date',
     render: (row) => new Date(row.created_at).toLocaleString(),
   },
 ]
 
 export default function History() {
-  const [transactions, setTransactions] = useState([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const { user, loading: authLoading } = useAuth()
+  const { tickets, loading, error } = useTickets(user?.id)
+  const isLoading = authLoading || loading
 
-  useEffect(() => {
-    api
-      .allTickets()
-      .then(setTransactions)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [])
+  function renderTransactionsBody() {
+    if (isLoading) {
+      return <StatePanel variant="loading" message="Loading transactions…" />
+    }
+    if (error) {
+      return (
+        <StatePanel
+          variant="error"
+          message={typeof error === 'string' ? error : 'Failed to load transactions.'}
+        />
+      )
+    }
+    if (!tickets || tickets.length === 0) {
+      return <StatePanel variant="empty" message="No transactions yet." />
+    }
+    return (
+      <Table
+        columns={transactionColumns}
+        rows={tickets}
+        emptyMessage="No transactions yet."
+      />
+    )
+  }
 
   return (
     <div className="page">
@@ -69,20 +80,14 @@ export default function History() {
         </div>
       </div>
 
+      {!authLoading && !user ? (
+        <p className="auth-message auth-message--error" role="alert">
+          Log in to see your trade history.
+        </p>
+      ) : null}
+
       <div className="page-grid page-grid--split">
-        <Card title="Transaction history">
-          {error ? (
-            <p className="ui-note" role="alert">
-              {error}
-            </p>
-          ) : (
-            <Table
-              columns={transactionColumns}
-              rows={transactions}
-              emptyMessage={loading ? 'Loading…' : 'No transactions yet.'}
-            />
-          )}
-        </Card>
+        <Card title="Transaction history">{renderTransactionsBody()}</Card>
 
         <Card title="Performance">
           <ChartPlaceholder
