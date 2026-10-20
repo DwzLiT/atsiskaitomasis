@@ -27,9 +27,35 @@ export class ApiError extends Error {
   constructor(message, type) {
     super(message)
     this.name = 'ApiError'
-    // type: 'config' | 'network' | 'limit' | 'daily_limit' | 'not_found' | 'api'
+    // type: 'config' | 'network' | 'limit' | 'daily_limit' | 'not_found' | 'api' | 'unavailable'
     this.type = type
   }
+}
+
+/** Pašalina API raktą iš Alpha Vantage teksto, kad jis nepatektų į UI / logus. */
+function sanitizeApiMessage(message) {
+  if (!message) return ''
+  let text = String(message)
+  if (API_KEY) {
+    text = text.split(API_KEY).join('[REDACTED]')
+  }
+  // Kartais raktas pasirodo kaip query parametro dalis
+  text = text.replace(/([?&]apikey=)[^&\s]+/gi, '$1[REDACTED]')
+  return text.trim()
+}
+
+/** Tikras užklausų limito / dažnio pranešimas (Note arba Information). */
+function isRateLimitMessage(message) {
+  const text = String(message).toLowerCase()
+  return (
+    text.includes('api call frequency') ||
+    text.includes('call volume') ||
+    text.includes('rate limit') ||
+    text.includes('calls per minute') ||
+    text.includes('calls per day') ||
+    text.includes('25 requests per day') ||
+    text.includes('higher api call')
+  )
 }
 
 function readCache(key) {
@@ -86,26 +112,41 @@ async function fetchFromApi(params, retried = false) {
   const data = await response.json()
 
   // Alpha Vantage visada grąžina 200, klaidas reikia tikrinti atsakymo turinyje
-  const limitNote = data.Note || data.Information
-  if (limitNote) {
-    if (/per day|daily/i.test(limitNote)) {
+  const notice = data.Note || data.Information
+  if (notice) {
+    const detail = sanitizeApiMessage(notice)
+
+    if (/per day|daily/i.test(notice)) {
       throw new ApiError(
         'Pasiektas šios dienos Alpha Vantage užklausų limitas (nemokamas planas – apie 25 per dieną). Kainos vėl atsinaujins rytoj.',
         'daily_limit',
       )
     }
-    // Per greitai išsiųstos užklausos – vieną kartą bandome dar kartą
-    if (!retried) {
-      await sleep(BURST_RETRY_MS)
-      return fetchFromApi(params, true)
+
+    if (isRateLimitMessage(notice)) {
+      // Per greitai išsiųstos užklausos – vieną kartą bandome dar kartą
+      if (!retried) {
+        await sleep(BURST_RETRY_MS)
+        return fetchFromApi(params, true)
+      }
+      throw new ApiError(
+        'Per daug Alpha Vantage užklausų per trumpą laiką. Palaukite minutę ir bandykite dar kartą.',
+        'limit',
+      )
     }
+
     throw new ApiError(
-      'Per daug Alpha Vantage užklausų per trumpą laiką. Palaukite minutę ir bandykite dar kartą.',
-      'limit',
+      `Alpha Vantage API pranešimas: ${detail || 'nežinoma klaida'}`,
+      'api',
     )
   }
+
   if (data['Error Message']) {
-    throw new ApiError('Akcija nerasta arba neteisinga užklausa', 'not_found')
+    const detail = sanitizeApiMessage(data['Error Message'])
+    throw new ApiError(
+      `Akcija nerasta arba neteisinga užklausa. (${detail})`,
+      'not_found',
+    )
   }
 
   return data

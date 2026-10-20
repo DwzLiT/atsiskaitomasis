@@ -73,6 +73,20 @@
   font-size: 0.85em;
 }
 
+.stock-saved-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+}
+
 .stock-status {
   color: var(--text-muted);
 }

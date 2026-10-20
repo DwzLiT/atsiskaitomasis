@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getQuote } from '../api/alphaVantage'
-import { supabase } from '../lib/supabase'
+import { resolveQuote } from '../lib/resolveQuote'
 import useAuth from '../lib/useAuth'
 import useSymbolSearch from '../lib/useSymbolSearch'
 import useWatchlist from '../lib/useWatchlist'
@@ -8,27 +7,23 @@ import TradeForm from './TradeForm'
 import Button from './ui/Button'
 import './StockSearch.css'
 
-// Išsaugo kainą instruments lentelėje. Grąžina pranešimą vartotojui.
-async function saveInstrument(symbol, company, quote) {
-  if (!supabase) return 'Kaina neišsaugota: Supabase nesukonfigūruotas.'
-
-  const { error } = await supabase.rpc('upsert_instrument', {
-    p_symbol: symbol,
-    p_company: company,
-    p_price: quote.price,
-    p_change_percent: quote.changePercent,
-  })
-
-  return error
-    ? 'Kaina neišsaugota. Ar esate prisijungę?'
-    : 'Kaina išsaugota duomenų bazėje.'
+function formatUpdatedAt(value) {
+  if (!value) return null
+  try {
+    return new Intl.DateTimeFormat('lt-LT', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value))
+  } catch {
+    return String(value)
+  }
 }
 
-// Gauna kainą ir ją išsaugo. Grąžina { quote, message }.
+// Gauna kainą (Alpha Vantage arba išsaugotą, jei API nepasiekiamas).
+// Grąžina { quote, message }.
 async function loadQuote(match) {
-  const quote = await getQuote(match.symbol)
-  const message = await saveInstrument(match.symbol, match.name, quote)
-  return { quote, message }
+  const quote = await resolveQuote(match.symbol, { company: match.name })
+  return { quote, message: quote.saveMessage }
 }
 
 // `initialStock` ({ symbol, company }) opens a stock right away, e.g. from the
@@ -116,7 +111,9 @@ function StockSearch({ initialStock, onSelect }) {
     if (showResults && search.results.length > 0) handleSelect(search.results[0])
   }
 
-  const isUp = quote && quote.change >= 0
+  const isUp = quote && quote.change != null && quote.change >= 0
+  const hasChange = quote && quote.change != null && quote.changePercent != null
+  const updatedLabel = quote ? formatUpdatedAt(quote.updatedAt) : null
 
   return (
     <section className="stock-search">
@@ -137,6 +134,11 @@ function StockSearch({ initialStock, onSelect }) {
       {showResults && search.error && <p className="stock-error">{search.error}</p>}
       {showResults && !search.error && search.results.length === 0 && (
         <p className="stock-status">Nieko nerasta.</p>
+      )}
+      {showResults && search.fromSaved && (
+        <p className="stock-status">
+          Alpha Vantage nepasiekiamas — rodomos anksčiau išsaugotos akcijos.
+        </p>
       )}
 
       {showResults && search.results.length > 0 && (
@@ -164,12 +166,32 @@ function StockSearch({ initialStock, onSelect }) {
           {quote && (
             <>
               <span className="stock-price">${quote.price.toFixed(2)}</span>
-              <span className={isUp ? 'stock-up' : 'stock-down'}>
-                {isUp ? '+' : ''}
-                {quote.change.toFixed(2)} ({isUp ? '+' : ''}
-                {quote.changePercent.toFixed(2)}%)
-              </span>
-              <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
+
+              {quote.source === 'saved' ? (
+                <span className="stock-saved-badge">Išsaugota kaina</span>
+              ) : null}
+
+              {hasChange ? (
+                <span className={isUp ? 'stock-up' : 'stock-down'}>
+                  {isUp ? '+' : ''}
+                  {quote.change.toFixed(2)} ({isUp ? '+' : ''}
+                  {quote.changePercent.toFixed(2)}%)
+                </span>
+              ) : quote.source === 'saved' ? (
+                <span className="stock-status">Pokytis nepasiekiamas (atsarginė kaina)</span>
+              ) : null}
+
+              {quote.source === 'live' && quote.date ? (
+                <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
+              ) : null}
+
+              {quote.source === 'saved' ? (
+                <span className="stock-date">
+                  {updatedLabel
+                    ? `Paskutinį kartą atnaujinta: ${updatedLabel}`
+                    : 'Paskutinio atnaujinimo data nežinoma'}
+                </span>
+              ) : null}
             </>
           )}
 
@@ -189,7 +211,7 @@ function StockSearch({ initialStock, onSelect }) {
             </div>
           )}
 
-          {quote && <TradeForm key={quote.symbol} symbol={quote.symbol} price={quote.price} />}
+          {quote && <TradeForm key={`${quote.symbol}-${quote.source}`} symbol={quote.symbol} price={quote.price} />}
         </div>
       )}
     </section>
