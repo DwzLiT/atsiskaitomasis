@@ -1,95 +1,114 @@
-import { useEffect, useState } from 'react'
-import { api } from '../api'
+import ProfitLossChart from '../components/charts/ProfitLossChart'
 import Badge from '../components/ui/Badge'
 import Card from '../components/ui/Card'
-import ChartPlaceholder from '../components/ui/ChartPlaceholder'
+import StatePanel from '../components/ui/StatePanel'
 import Table from '../components/ui/Table'
+import useAuth from '../lib/useAuth'
+import usePortfolio from '../lib/usePortfolio'
+import useSnapshots from '../lib/useSnapshots'
+import useTickets from '../lib/useTickets'
+import { computeTotalValue } from '../utils/chart'
+import { formatMoney } from '../utils/format'
 
-function formatMoney(value) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(value)
-}
+const STATUS_LABELS = { FILLED: 'Įvykdyta', REJECTED: 'Atmesta' }
 
 const transactionColumns = [
   {
-    key: 'type',
-    label: 'Type',
+    key: 'side',
+    label: 'Tipas',
     render: (row) => (
-      <Badge variant={row.side === 'BUY' ? 'buy' : 'sell'}>{row.side}</Badge>
+      <Badge variant={row.side === 'BUY' ? 'buy' : 'sell'}>{row.side === 'BUY' ? 'Pirkimas' : 'Pardavimas'}
+      </Badge>
     ),
   },
-  { key: 'symbol', label: 'Symbol' },
-  { key: 'trader_name', label: 'Trader' },
+  { key: 'symbol', label: 'Simbolis' },
   {
     key: 'quantity',
-    label: 'Quantity',
+    label: 'Kiekis',
     align: 'right',
     render: (row) => row.quantity,
   },
   {
     key: 'price',
-    label: 'Price',
+    label: 'Kaina',
     align: 'right',
-    render: (row) => formatMoney(row.price),
+    render: (row) => formatMoney(Number(row.price)),
   },
   {
     key: 'total',
-    label: 'Total',
+    label: 'Suma',
     align: 'right',
-    render: (row) => formatMoney(row.price * row.quantity),
+    render: (row) => formatMoney(Number(row.price) * Number(row.quantity)),
   },
   {
-    key: 'date',
-    label: 'Date',
-    render: (row) => new Date(row.created_at).toLocaleString(),
+    key: 'status',
+    label: 'Būsena',
+    render: (row) => STATUS_LABELS[row.status] ?? row.status,
+  },
+  {
+    key: 'created_at',
+    label: 'Data',
+    render: (row) => new Date(row.created_at).toLocaleString('lt-LT'),
   },
 ]
 
 export default function History() {
-  const [transactions, setTransactions] = useState([])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const { user, loading: authLoading } = useAuth()
+  const { tickets, loading, error } = useTickets(user?.id)
+  const portfolio = usePortfolio(user?.id)
+  const history = useSnapshots(user?.id)
+  const isLoading = authLoading || loading
 
-  useEffect(() => {
-    api
-      .allTickets()
-      .then(setTransactions)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [])
+  function renderTransactionsBody() {
+    if (isLoading) {
+      return <StatePanel variant="loading" message="Kraunami sandoriai…" />
+    }
+    if (error) {
+      return (
+        <StatePanel
+          variant="error"
+          message={typeof error === 'string' ? error : 'Nepavyko įkelti sandorių.'}
+        />
+      )
+    }
+    if (!tickets || tickets.length === 0) {
+      return <StatePanel variant="empty" message="Sandorių dar nėra." />
+    }
+    return (
+      <Table
+        columns={transactionColumns}
+        rows={tickets}
+        emptyMessage="Sandorių dar nėra."
+      />
+    )
+  }
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
-          <h1>History / Stats</h1>
-          <p>Past paper trades and performance overview.</p>
+          <h1>Istorija / statistika</h1>
+          <p>Ankstesni virtualūs sandoriai ir rezultatų apžvalga.</p>
         </div>
       </div>
 
-      <div className="page-grid page-grid--split">
-        <Card title="Transaction history">
-          {error ? (
-            <p className="ui-note" role="alert">
-              {error}
-            </p>
-          ) : (
-            <Table
-              columns={transactionColumns}
-              rows={transactions}
-              emptyMessage={loading ? 'Loading…' : 'No transactions yet.'}
-            />
-          )}
-        </Card>
+      {!authLoading && !user ? (
+        <p className="auth-message auth-message--error" role="alert">
+          Prisijunkite, kad matytumėte savo sandorių istoriją.
+        </p>
+      ) : null}
 
-        <Card title="Performance">
-          <ChartPlaceholder
-            title="Profit & Loss"
-            description="Reserved for P/L performance chart. Charts will be added by the team."
-          />
-        </Card>
+      <div className="page-grid page-grid--split">
+        <Card title="Sandorių istorija">{renderTransactionsBody()}</Card>
+
+        <ProfitLossChart
+          user={user}
+          snapshots={history.snapshots}
+          tickets={tickets}
+          loading={authLoading || history.loading}
+          error={history.error}
+          currentValue={computeTotalValue(portfolio.trader, portfolio.positions)}
+        />
       </div>
     </div>
   )

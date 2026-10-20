@@ -7,11 +7,27 @@ const CACHE_PREFIX = 'alphaVantage:'
 const memoryCache = new Map()
 const pendingRequests = new Map()
 
+// Nemokamas planas leidžia ~1 užklausą per sekundę (ir ~25 per dieną),
+// todėl užklausos siunčiamos ne dažniau kaip kas 1,2 s.
+const MIN_GAP_MS = 1200
+const BURST_RETRY_MS = 2000
+let nextSlot = 0
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Laukia savo eilės, kad kelios užklausos iš eilės neviršytų limito.
+async function waitForTurn() {
+  const now = Date.now()
+  const wait = Math.max(0, nextSlot - now)
+  nextSlot = Math.max(now, nextSlot) + MIN_GAP_MS
+  if (wait > 0) await sleep(wait)
+}
+
 export class ApiError extends Error {
   constructor(message, type) {
     super(message)
     this.name = 'ApiError'
-    // type: 'config' | 'network' | 'limit' | 'not_found' | 'api' | 'unavailable'
+    // type: 'config' | 'network' | 'limit' | 'daily_limit' | 'not_found' | 'api' | 'unavailable'
     this.type = type
   }
 }
@@ -73,12 +89,14 @@ function writeCache(key, data) {
   }
 }
 
-async function fetchFromApi(params) {
+async function fetchFromApi(params, retried = false) {
   if (!API_KEY) {
     throw new ApiError('Nerastas API raktas (VITE_ALPHA_VANTAGE_KEY faile .env)', 'config')
   }
 
   const url = `${BASE_URL}?${new URLSearchParams({ ...params, apikey: API_KEY })}`
+
+  await waitForTurn()
 
   let response
   try {
@@ -98,9 +116,21 @@ async function fetchFromApi(params) {
   if (notice) {
     const detail = sanitizeApiMessage(notice)
 
-    if (isRateLimitMessage(notice)) {
+    if (/per day|daily/i.test(notice)) {
       throw new ApiError(
-        `Pasiektas nemokamo Alpha Vantage plano užklausų limitas. Palaukite minutę ir bandykite dar kartą. (${detail})`,
+        'Pasiektas šios dienos Alpha Vantage užklausų limitas (nemokamas planas – apie 25 per dieną). Kainos vėl atsinaujins rytoj.',
+        'daily_limit',
+      )
+    }
+
+    if (isRateLimitMessage(notice)) {
+      // Per greitai išsiųstos užklausos – vieną kartą bandome dar kartą
+      if (!retried) {
+        await sleep(BURST_RETRY_MS)
+        return fetchFromApi(params, true)
+      }
+      throw new ApiError(
+        `Per daug Alpha Vantage užklausų per trumpą laiką. Palaukite minutę ir bandykite dar kartą. (${detail})`,
         'limit',
       )
     }

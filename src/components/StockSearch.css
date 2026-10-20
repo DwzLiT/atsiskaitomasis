@@ -143,3 +143,11 @@
 .trade-toggle .btn {
   flex: 1;
 }
+
+.stock-watch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex-basis: 100%;
+}

@@ -2,10 +2,9 @@ import Button from '../ui/Button'
 import '../../styles/auth.css'
 
 const NAV_ITEMS = [
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'trade', label: 'Trade' },
-  { id: 'history', label: 'History' },
-  { id: 'traders', label: 'Traders' },
+  { id: 'portfolio', label: 'Portfelis' },
+  { id: 'trade', label: 'Prekyba' },
+  { id: 'history', label: 'Istorija' },
 ]
 
 export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {
@@ -18,11 +17,11 @@ export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {
           </div>
           <div>
             <div className="navbar__title">Real Paper Trading</div>
-            <span className="navbar__subtitle">Simulator</span>
+            <span className="navbar__subtitle">Simuliatorius</span>
           </div>
         </div>
 
-        <nav className="navbar__nav" aria-label="Main">
+        <nav className="navbar__nav" aria-label="Pagrindinis meniu">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.id}
@@ -47,7 +46,7 @@ export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {
                 {user.email}
               </span>
               <Button variant="ghost" className="btn--compact" onClick={onSignOut}>
-                Log out
+                Atsijungti
               </Button>
             </>
           ) : (
@@ -57,14 +56,14 @@ export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {
                 className="btn--compact"
                 onClick={() => onNavigate('login')}
               >
-                Log in
+                Prisijungti
               </Button>
               <Button
                 variant="primary"
                 className="btn--compact"
                 onClick={() => onNavigate('register')}
               >
-                Register
+                Registruotis
               </Button>
             </>
           )}

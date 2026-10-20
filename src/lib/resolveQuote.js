@@ -1,7 +1,7 @@
 import { ApiError, getQuote } from '../api/alphaVantage'
 import { getSavedInstrument, upsertInstrumentPrice } from './instruments'
 
-const FALLBACK_ERROR_TYPES = new Set(['limit', 'network', 'config', 'api'])
+const FALLBACK_ERROR_TYPES = new Set(['limit', 'daily_limit', 'network', 'config', 'api'])
 
 function canUseSavedPrice(err) {
   return err instanceof ApiError && FALLBACK_ERROR_TYPES.has(err.type)

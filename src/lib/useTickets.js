@@ -12,7 +12,7 @@ async function fetchTickets() {
     .order('created_at', { ascending: false })
 
   return error
-    ? { tickets: [], error: 'Could not load your trade history. Please try again.' }
+    ? { tickets: [], error: 'Nepavyko įkelti sandorių istorijos. Bandykite dar kartą.' }
     : { tickets: data ?? [], error: '' }
 }
 

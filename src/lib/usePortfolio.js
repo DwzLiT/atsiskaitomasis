@@ -8,7 +8,7 @@ const EMPTY = { userId: null, trader: null, positions: [], error: '' }
 async function fetchPortfolio() {
   const [traderResult, positionsResult] = await Promise.all([
     supabase.from('traders').select('*').single(),
-    supabase.from('positions').select('*, instruments(company, price)'),
+    supabase.from('positions').select('*, instruments(company, price, updated_at)'),
   ])
 
   if (traderResult.error || positionsResult.error) {
@@ -17,8 +17,8 @@ async function fetchPortfolio() {
       positions: [],
       error:
         traderResult.error?.code === 'PGRST116'
-          ? 'No trader account found for this user.'
-          : 'Could not load your portfolio. Please try again.',
+          ? 'Šiam vartotojui nerasta prekybos paskyra.'
+          : 'Nepavyko įkelti portfelio. Bandykite dar kartą.',
     }
   }
 

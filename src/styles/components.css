@@ -235,12 +235,6 @@
   border: 1px solid transparent;
 }
 
-.badge--demo {
-  background: rgba(251, 191, 36, 0.12);
-  border-color: rgba(251, 191, 36, 0.35);
-  color: #fbbf24;
-}
-
 .badge--buy {
   background: var(--buy-soft);
   border-color: var(--buy-border);
@@ -424,61 +418,147 @@
   padding: 2rem 1rem !important;
 }
 
-/* —— Chart placeholder —— */
-.chart-placeholder {
-  min-height: 260px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  background:
-    repeating-linear-gradient(
-      -45deg,
-      transparent,
-      transparent 8px,
-      rgba(148, 163, 184, 0.03) 8px,
-      rgba(148, 163, 184, 0.03) 16px
-    ),
-    var(--bg-elevated);
+/* —— Charts —— */
+.line-chart {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  touch-action: pan-y;
+}
+
+.line-chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.line-chart__grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.line-chart__label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+.line-chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.line-chart__line--up {
+  stroke: var(--buy);
+}
+
+.line-chart__line--down {
+  stroke: var(--sell);
+}
+
+.line-chart__area--up {
+  fill: var(--buy-soft);
+}
+
+.line-chart__area--down {
+  fill: var(--sell-soft);
+}
+
+.line-chart__baseline {
+  stroke: var(--text-muted);
+  stroke-dasharray: 4 4;
+}
+
+.line-chart__marker {
+  stroke: var(--bg-card);
+  stroke-width: 2;
+}
+
+.line-chart__marker--up {
+  fill: var(--buy);
+}
+
+.line-chart__marker--down {
+  fill: var(--sell);
+}
+
+.line-chart__cursor {
+  stroke: var(--border-strong);
+}
+
+.line-chart__dot {
+  fill: var(--text-h);
+  stroke: var(--bg-card);
+  stroke-width: 2;
+}
+
+.line-chart__tooltip {
+  position: absolute;
+  pointer-events: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 1.5rem;
-  text-align: center;
+  gap: 0.1rem;
+  min-width: 150px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8rem;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
 }
 
-.chart-placeholder__icon {
-  width: 48px;
-  height: 28px;
-  border-bottom: 2px solid var(--accent);
-  border-left: 2px solid var(--border-strong);
-  opacity: 0.7;
-  position: relative;
-}
-
-.chart-placeholder__icon::after {
-  content: '';
-  position: absolute;
-  inset: 4px 0 0 4px;
-  background: linear-gradient(
-    135deg,
-    transparent 40%,
-    rgba(56, 189, 248, 0.35) 40%,
-    rgba(56, 189, 248, 0.1)
-  );
-  clip-path: polygon(0 80%, 25% 55%, 45% 65%, 70% 30%, 100% 45%, 100% 100%, 0 100%);
-}
-
-.chart-placeholder__title {
+.line-chart__tooltip strong {
+  font-family: var(--mono);
   color: var(--text-h);
-  font-weight: 600;
-  font-size: 0.95rem;
 }
 
-.chart-placeholder__text {
+.line-chart__tooltip-date {
   color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.chart-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.75rem;
   font-size: 0.85rem;
-  max-width: 280px;
+  color: var(--text-muted);
+}
+
+.chart-summary .mono:first-child {
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+
+.range-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.range-tabs__btn {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.range-tabs__btn:hover {
+  color: var(--text-h);
+  background: var(--bg-hover);
+}
+
+.range-tabs__btn--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
 }
 
 /* —— Trade form —— */
@@ -516,9 +596,10 @@
   font-size: 0.8rem;
   color: var(--text-muted);
   padding: 0.65rem 0.75rem;
+  margin-top: 1rem;
   border-radius: var(--radius-sm);
-  background: rgba(251, 191, 36, 0.06);
-  border: 1px solid rgba(251, 191, 36, 0.2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
 }
 
 /* —— Watchlist —— */
@@ -529,9 +610,62 @@
   margin-bottom: 1.25rem;
 }
 
-.watchlist-form .field {
+.watchlist-form .symbol-search {
   flex: 1;
   min-width: 0;
+}
+
+/* —— Symbol search dropdown —— */
+.symbol-search {
+  position: relative;
+}
+
+.symbol-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+
+.symbol-dropdown__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.symbol-dropdown__list li + li {
+  border-top: 1px solid var(--border);
+}
+
+.symbol-dropdown__item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.symbol-dropdown__item:hover,
+.symbol-dropdown__item--active {
+  background: var(--accent-soft);
+}
+
+.symbol-dropdown__status {
+  padding: 10px 12px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
 .watchlist-form__action {
@@ -545,6 +679,24 @@
 
 .watchlist-note {
   margin-top: 1rem;
+}
+
+.card-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+.card-action__meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.table-actions {
+  display: inline-flex;
+  gap: 0.35rem;
 }
 
 .btn--compact {
@@ -631,30 +783,4 @@
   .stat-card__value {
     font-size: 1.45rem;
   }
-}
-/* —— Traders page —— */
-.trader-list {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.trader-list__item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.75rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.trader-list__item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.trader-list__name {
-  color: var(--text-h);
 }

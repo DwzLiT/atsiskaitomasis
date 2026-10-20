@@ -7,7 +7,6 @@ import Login from './pages/Login'
 import Portfolio from './pages/Portfolio'
 import Register from './pages/Register'
 import Trade from './pages/Trade'
-import Traders from './pages/Traders'
 import './App.css'
 import './styles/components.css'
 
@@ -15,29 +14,35 @@ const PAGES = {
   portfolio: Portfolio,
   trade: Trade,
   history: History,
-  traders: Traders,
   login: Login,
   register: Register,
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('portfolio')
+  // params lets one page open another with context, e.g. a watchlist
+  // symbol opened on Trade.
+  const [route, setRoute] = useState({ page: 'portfolio', params: null, key: 0 })
   const { user } = useAuth()
+  const currentPage = route.page
   const Page = PAGES[currentPage] ?? Portfolio
+
+  function navigate(page, params = null) {
+    setRoute((prev) => ({ page, params, key: prev.key + 1 }))
+  }
 
   async function handleSignOut() {
     await supabase?.auth.signOut()
-    setCurrentPage('login')
+    navigate('login')
   }
 
   return (
     <Layout
       currentPage={currentPage}
-      onNavigate={setCurrentPage}
+      onNavigate={navigate}
       user={user}
       onSignOut={handleSignOut}
     >
-      <Page onNavigate={setCurrentPage} />
+      <Page key={route.key} onNavigate={navigate} params={route.params} />
     </Layout>
   )
 }
