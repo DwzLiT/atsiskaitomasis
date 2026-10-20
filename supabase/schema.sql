@@ -128,3 +128,11 @@ alter table instruments enable row level security;
 alter table traders     enable row level security;
 alter table tickets     enable row level security;
 alter table positions   enable row level security;
+
+-- Traders a user assigned themselves to; see supabase/trusted_traders.sql.
+create table if not exists trusted_traders (
+  user_id   uuid not null references auth.users (id) on delete cascade,
+  trader_id uuid not null references traders (id) on delete cascade,
+  primary key (user_id, trader_id)
+);
+alter table trusted_traders enable row level security;

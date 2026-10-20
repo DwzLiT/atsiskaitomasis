@@ -14,13 +14,103 @@ const wrap = (handler) => (req, res) =>
 // Exceptions raised by place_ticket() (P0001) carry user-facing messages.
 const isRuleViolation = (error) => error.code === 'P0001'
 
-app.get('/api/traders', wrap(async (_req, res) => {
-  const { data, error } = await supabase.from('traders').select('*').order('created_at')
+// Resolves the signed-in user from the Supabase access token sent as a
+// Bearer token. Sends the 401 itself and returns null when there is none.
+async function requireUser(req, res, missingMessage = 'Sign in to continue') {
+  const token = (req.headers.authorization ?? '').replace(/^Bearer /i, '')
+  if (!token) {
+    res.status(401).json({ error: missingMessage })
+    return null
+  }
+  const { data: auth, error } = await supabase.auth.getUser(token)
+  if (error || !auth?.user) {
+    res.status(401).json({ error: 'Session expired, please sign in again' })
+    return null
+  }
+  return auth.user
+}
+
+// Ids of the traders a user sees throughout the app: the traders they own
+// (always, "including himself by default") plus the ones they assigned
+// themselves to on the Traders page (table trusted_traders).
+async function assignedTraderIds(userId) {
+  const [owned, assigned] = await Promise.all([
+    supabase.from('traders').select('id').eq('user_id', userId),
+    supabase.from('trusted_traders').select('trader_id').eq('user_id', userId),
+  ])
+  if (owned.error) throw owned.error
+  if (assigned.error) throw assigned.error
+  return {
+    ownedIds: owned.data.map((t) => t.id),
+    ids: [...new Set([...owned.data.map((t) => t.id), ...assigned.data.map((t) => t.trader_id)])],
+  }
+}
+
+// Signed-in user plus their visible trader ids; null once a 401 was sent.
+async function requireScope(req, res, missingMessage) {
+  const user = await requireUser(req, res, missingMessage)
+  if (!user) return null
+  return { user, ...(await assignedTraderIds(user.id)) }
+}
+
+// Every trader with whether the user owns it / has assigned themselves to it.
+// Names only: other traders' email and cash stay private.
+app.get('/api/trusted', wrap(async (req, res) => {
+  const scope = await requireScope(req, res, 'Sign in to manage your traders')
+  if (!scope) return
+  const { data, error } = await supabase.from('traders').select('id, name').order('created_at')
+  if (error) throw error
+  res.json(data.map((t) => ({
+    id: t.id,
+    name: t.name,
+    own: scope.ownedIds.includes(t.id),
+    selected: scope.ids.includes(t.id),
+  })))
+}))
+
+// Replaces the user's assigned traders. Owned traders are always included, so
+// they are ignored here.
+app.put('/api/trusted', wrap(async (req, res) => {
+  const user = await requireUser(req, res, 'Sign in to manage your traders')
+  if (!user) return
+  const requested = req.body?.trader_ids
+  if (!Array.isArray(requested) || requested.some((id) => typeof id !== 'string')) {
+    return res.status(400).json({ error: 'trader_ids must be an array of trader ids' })
+  }
+
+  const { data: known, error: knownError } = await supabase
+    .from('traders').select('id, user_id').in('id', requested)
+  if (knownError) throw knownError
+  if (known.length !== new Set(requested).size) {
+    return res.status(400).json({ error: 'unknown trader in trader_ids' })
+  }
+  const rows = known
+    .filter((t) => t.user_id !== user.id)
+    .map((t) => ({ user_id: user.id, trader_id: t.id }))
+
+  const { error: deleteError } = await supabase
+    .from('trusted_traders').delete().eq('user_id', user.id)
+  if (deleteError) throw deleteError
+  if (rows.length > 0) {
+    const { error: insertError } = await supabase.from('trusted_traders').insert(rows)
+    if (insertError) throw insertError
+  }
+  res.json({ trader_ids: rows.map((r) => r.trader_id) })
+}))
+
+app.get('/api/traders', wrap(async (req, res) => {
+  const scope = await requireScope(req, res, 'Sign in to see your traders')
+  if (!scope) return
+  const { data, error } = await supabase
+    .from('traders').select('*').in('id', scope.ids).order('created_at')
   if (error) throw error
   res.json(data)
 }))
 
 app.get('/api/traders/:id', wrap(async (req, res) => {
+  const scope = await requireScope(req, res)
+  if (!scope) return
+  if (!scope.ids.includes(req.params.id)) return res.status(404).json({ error: 'trader not found' })
   const { data, error } = await supabase
     .from('traders').select('*').eq('id', req.params.id).maybeSingle()
   if (error) throw error
@@ -29,6 +119,9 @@ app.get('/api/traders/:id', wrap(async (req, res) => {
 }))
 
 app.get('/api/traders/:id/tickets', wrap(async (req, res) => {
+  const scope = await requireScope(req, res)
+  if (!scope) return
+  if (!scope.ids.includes(req.params.id)) return res.status(404).json({ error: 'trader not found' })
   const { data, error } = await supabase
     .from('tickets').select('*').eq('trader_id', req.params.id)
     .order('created_at', { ascending: false })
@@ -37,6 +130,9 @@ app.get('/api/traders/:id/tickets', wrap(async (req, res) => {
 }))
 
 app.get('/api/traders/:id/positions', wrap(async (req, res) => {
+  const scope = await requireScope(req, res)
+  if (!scope) return
+  if (!scope.ids.includes(req.params.id)) return res.status(404).json({ error: 'trader not found' })
   const { data, error } = await supabase
     .from('positions').select('*').eq('trader_id', req.params.id).order('symbol')
   if (error) throw error
@@ -52,36 +148,22 @@ app.get('/api/quotes/:symbol', wrap(async (req, res) => {
   res.json(data)
 }))
 
-// Resolves the signed-in user from the Supabase access token sent as a
-// Bearer token. Sends the 401 itself and returns null when there is none.
-async function requireUser(req, res, missingMessage) {
-  const token = (req.headers.authorization ?? '').replace(/^Bearer /i, '')
-  if (!token) {
-    res.status(401).json({ error: missingMessage })
-    return null
-  }
-  const { data: auth, error } = await supabase.auth.getUser(token)
-  if (error || !auth?.user) {
-    res.status(401).json({ error: 'Session expired, please sign in again' })
-    return null
-  }
-  return auth.user
-}
-
-// Aggregated portfolio of all traders owned by the signed-in user.
+// Aggregated portfolio of the traders assigned to the signed-in user.
 app.get('/api/portfolio', wrap(async (req, res) => {
-  const user = await requireUser(req, res, 'Sign in to see your portfolio')
-  if (!user) return
+  const scope = await requireScope(req, res, 'Sign in to see your portfolio')
+  if (!scope) return
 
-  const { data: traders, error: tradersError } = await supabase
-    .from('traders').select('id, name, cash_balance').eq('user_id', user.id)
-  if (tradersError) throw tradersError
-
+  let traders = []
   let positions = []
   let prices = {}
-  if (traders.length > 0) {
+  if (scope.ids.length > 0) {
+    const { data: found, error: tradersError } = await supabase
+      .from('traders').select('id, name, cash_balance').in('id', scope.ids)
+    if (tradersError) throw tradersError
+    traders = found
+
     const { data, error } = await supabase
-      .from('positions').select('trader_id, symbol, shares, avg_cost').in('trader_id', traders.map((t) => t.id))
+      .from('positions').select('trader_id, symbol, shares, avg_cost').in('trader_id', scope.ids)
     if (error) throw error
     positions = data
     const symbols = [...new Set(positions.map((p) => p.symbol))]
@@ -95,13 +177,13 @@ app.get('/api/portfolio', wrap(async (req, res) => {
   res.json(aggregatePortfolio({ traders, positions, prices }))
 }))
 
-// Tickets of the signed-in user's traders, newest first, with the trader's name.
+// Tickets of the traders assigned to the signed-in user, newest first, with
+// the trader's name.
 app.get('/api/tickets', wrap(async (req, res) => {
-  const user = await requireUser(req, res, 'Sign in to see your history')
-  if (!user) return
+  const scope = await requireScope(req, res, 'Sign in to see your history')
+  if (!scope) return
   const { data, error } = await supabase
-    .from('tickets').select('*, traders!inner(name)')
-    .eq('traders.user_id', user.id)
+    .from('tickets').select('*, traders(name)').in('trader_id', scope.ids)
     .order('created_at', { ascending: false })
   if (error) throw error
   res.json(data.map(({ traders, ...ticket }) => ({ ...ticket, trader_name: traders?.name })))
@@ -109,6 +191,8 @@ app.get('/api/tickets', wrap(async (req, res) => {
 
 // Create (and execute) a BUY or SELL ticket at the current instrument price.
 app.post('/api/tickets', wrap(async (req, res) => {
+  const scope = await requireScope(req, res, 'Sign in to place orders')
+  if (!scope) return
   const { trader_id, symbol, side, quantity } = req.body ?? {}
   const normalizedSide = String(side).toUpperCase()
   const qty = Number(quantity)
@@ -122,6 +206,9 @@ app.post('/api/tickets', wrap(async (req, res) => {
     return res.status(400).json({
       error: 'trader_id, symbol, side (BUY|SELL) and a positive integer quantity are required',
     })
+  }
+  if (!scope.ids.includes(trader_id)) {
+    return res.status(403).json({ error: 'That trader is not assigned to you' })
   }
   const { data, error } = await supabase.rpc('place_ticket', {
     p_trader_id: trader_id,
