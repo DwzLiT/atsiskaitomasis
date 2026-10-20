@@ -7,11 +7,25 @@ import { supabase } from './supabase'
 export async function getSavedInstrument(symbol) {
   if (!supabase || !symbol) return null
 
-  const { data, error } = await supabase
+  const normalized = String(symbol).trim().toUpperCase()
+
+  // Pirma tikslus match, tada case-insensitive (jei DB saugo mišrų registrą)
+  let { data, error } = await supabase
     .from('instruments')
     .select('symbol, company, price, updated_at')
-    .eq('symbol', String(symbol).trim().toUpperCase())
+    .eq('symbol', normalized)
     .maybeSingle()
+
+  if (!data && !error) {
+    const fallback = await supabase
+      .from('instruments')
+      .select('symbol, company, price, updated_at')
+      .ilike('symbol', normalized)
+      .limit(1)
+      .maybeSingle()
+    data = fallback.data
+    error = fallback.error
+  }
 
   if (error) {
     console.warn('getSavedInstrument failed:', error.message)

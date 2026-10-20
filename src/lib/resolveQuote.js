@@ -4,7 +4,12 @@ import { getSavedInstrument, upsertInstrumentPrice } from './instruments'
 const FALLBACK_ERROR_TYPES = new Set(['limit', 'network', 'config', 'api'])
 
 function canUseSavedPrice(err) {
-  return err instanceof ApiError && FALLBACK_ERROR_TYPES.has(err.type)
+  // Duck-typing: Vite HMR kartais sulaužo `instanceof` tarp modulių kopijų.
+  const type = err?.type
+  return (
+    (err instanceof ApiError || err?.name === 'ApiError' || typeof type === 'string') &&
+    FALLBACK_ERROR_TYPES.has(type)
+  )
 }
 
 /**

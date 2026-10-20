@@ -7,8 +7,8 @@ import {
 import { demoDelay } from './delay'
 
 /**
- * Portfolio data access. Currently returns DEMO stubs.
- * Swap implementations here when Supabase is ready — pages stay unchanged.
+ * Legacy DEMO helpers (unused by Portfolio page).
+ * Live portfolio data comes from src/lib/usePortfolio.js + Supabase.
  */
 export async function getPortfolioSummary() {
   await demoDelay()

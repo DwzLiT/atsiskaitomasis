@@ -38,7 +38,9 @@ function isRateLimitMessage(message) {
     text.includes('calls per minute') ||
     text.includes('calls per day') ||
     text.includes('25 requests per day') ||
-    text.includes('higher api call')
+    text.includes('higher api call') ||
+    text.includes('standard api rate limit') ||
+    text.includes('thank you for using alpha vantage')
   )
 }
 
