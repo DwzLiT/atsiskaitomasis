@@ -5,7 +5,8 @@ import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import StatePanel from '../components/ui/StatePanel'
 
-// Pick which traders feed Portfolio, History and Trade. The user's own
+// Pick the traders you trust: they get to see your cash, holdings and orders
+// in their own Portfolio, History and Trade. Your own
 // trader is always included and cannot be unchecked.
 export default function Traders() {
   const [traders, setTraders] = useState(null)
@@ -42,7 +43,7 @@ export default function Traders() {
     try {
       const ids = traders.filter((t) => !t.own && selected.has(t.id)).map((t) => t.id)
       await api.saveAssignedTraders(ids)
-      setMessage({ type: 'success', text: 'Saved. Portfolio, History and Trade now use these traders.' })
+      setMessage({ type: 'success', text: 'Saved. These traders can now see your data.' })
     } catch (err) {
       setMessage({ type: 'error', text: err.message })
     } finally {
@@ -91,11 +92,11 @@ export default function Traders() {
       <div className="page-header">
         <div>
           <h1>Traders</h1>
-          <p>Choose the traders whose cash, holdings and orders you see across the app.</p>
+          <p>Tick the traders you trust. They see your holdings and orders; you see those of the traders who trust you.</p>
         </div>
       </div>
 
-      <Card title="Assigned traders">{renderList()}</Card>
+      <Card title="Traders I trust">{renderList()}</Card>
     </div>
   )
 }

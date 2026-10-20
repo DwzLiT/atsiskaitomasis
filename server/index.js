@@ -31,19 +31,29 @@ async function requireUser(req, res, missingMessage = 'Sign in to continue') {
 }
 
 // Ids of the traders a user sees throughout the app: the traders they own
-// (always, "including himself by default") plus the ones they assigned
-// themselves to on the Traders page (table trusted_traders).
+// (always, "including himself by default") plus the traders of every user who
+// trusts one of theirs. A user trusts a trader by ticking it on the Traders
+// page, which stores (user_id, trader_id) in trusted_traders.
 async function assignedTraderIds(userId) {
-  const [owned, assigned] = await Promise.all([
-    supabase.from('traders').select('id').eq('user_id', userId),
-    supabase.from('trusted_traders').select('trader_id').eq('user_id', userId),
-  ])
-  if (owned.error) throw owned.error
-  if (assigned.error) throw assigned.error
-  return {
-    ownedIds: owned.data.map((t) => t.id),
-    ids: [...new Set([...owned.data.map((t) => t.id), ...assigned.data.map((t) => t.trader_id)])],
+  const { data: owned, error: ownedError } = await supabase
+    .from('traders').select('id').eq('user_id', userId)
+  if (ownedError) throw ownedError
+  const ownedIds = owned.map((t) => t.id)
+  if (ownedIds.length === 0) return { ownedIds, ids: [] }
+
+  const { data: trusting, error: trustError } = await supabase
+    .from('trusted_traders').select('user_id').in('trader_id', ownedIds)
+  if (trustError) throw trustError
+  const trustingUserIds = [...new Set(trusting.map((r) => r.user_id))]
+
+  let trustedByIds = []
+  if (trustingUserIds.length > 0) {
+    const { data, error } = await supabase
+      .from('traders').select('id').in('user_id', trustingUserIds)
+    if (error) throw error
+    trustedByIds = data.map((t) => t.id)
   }
+  return { ownedIds, ids: [...new Set([...ownedIds, ...trustedByIds])] }
 }
 
 // Signed-in user plus their visible trader ids; null once a 401 was sent.
@@ -53,22 +63,26 @@ async function requireScope(req, res, missingMessage) {
   return { user, ...(await assignedTraderIds(user.id)) }
 }
 
-// Every trader with whether the user owns it / has assigned themselves to it.
-// Names only: other traders' email and cash stay private.
+// Every trader with whether the user owns it / has trusted it (so that trader
+// can see the user's data). Names only: other traders' email and cash stay
+// private.
 app.get('/api/trusted', wrap(async (req, res) => {
-  const scope = await requireScope(req, res, 'Sign in to manage your traders')
-  if (!scope) return
-  const { data, error } = await supabase.from('traders').select('id, name').order('created_at')
-  if (error) throw error
-  res.json(data.map((t) => ({
-    id: t.id,
-    name: t.name,
-    own: scope.ownedIds.includes(t.id),
-    selected: scope.ids.includes(t.id),
-  })))
+  const user = await requireUser(req, res, 'Sign in to manage your traders')
+  if (!user) return
+  const [traders, trusted] = await Promise.all([
+    supabase.from('traders').select('id, name, user_id').order('created_at'),
+    supabase.from('trusted_traders').select('trader_id').eq('user_id', user.id),
+  ])
+  if (traders.error) throw traders.error
+  if (trusted.error) throw trusted.error
+  const trustedIds = new Set(trusted.data.map((r) => r.trader_id))
+  res.json(traders.data.map((t) => {
+    const own = t.user_id === user.id
+    return { id: t.id, name: t.name, own, selected: own || trustedIds.has(t.id) }
+  }))
 }))
 
-// Replaces the user's assigned traders. Owned traders are always included, so
+// Replaces the traders the user trusts. Owned traders are always trusted, so
 // they are ignored here.
 app.put('/api/trusted', wrap(async (req, res) => {
   const user = await requireUser(req, res, 'Sign in to manage your traders')
@@ -208,7 +222,7 @@ app.post('/api/tickets', wrap(async (req, res) => {
     })
   }
   if (!scope.ids.includes(trader_id)) {
-    return res.status(403).json({ error: 'That trader is not assigned to you' })
+    return res.status(403).json({ error: 'You do not have access to that trader' })
   }
   const { data, error } = await supabase.rpc('place_ticket', {
     p_trader_id: trader_id,

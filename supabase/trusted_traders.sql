@@ -1,5 +1,6 @@
--- Traders a signed-in user has assigned themselves to (Traders page).
--- The user's own traders (traders.user_id) are always included by the API, so
+-- Traders a signed-in user trusts (Traders page): user_id trusts trader_id, so
+-- the owner of trader_id sees user_id's traders in their Portfolio/History/Trade.
+-- A user's own traders (traders.user_id) are always visible to them, so
 -- they are not stored here. Run once in the Supabase SQL editor.
 
 create table if not exists trusted_traders (

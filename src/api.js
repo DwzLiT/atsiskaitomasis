@@ -1,7 +1,7 @@
 import { supabase } from './lib/supabase'
 
 // Every call carries the signed-in user's token: the API only returns the
-// traders assigned to that user.
+// traders that user may see.
 async function request(path, options = {}) {
   const { data } = (await supabase?.auth.getSession()) ?? {}
   const token = data?.session?.access_token
