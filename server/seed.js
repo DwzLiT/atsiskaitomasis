@@ -39,6 +39,25 @@ check(
 )
 const { data: created, error } = await supabase.from('traders').insert(traders).select()
 check({ error }, 'traders')
+
+// Optional: give both sample traders to one signed-up user, so that user's
+// portfolio aggregates them. SEED_USER_EMAIL=<email of a Supabase Auth user>
+const ownerEmail = process.env.SEED_USER_EMAIL
+if (ownerEmail) {
+  const { data: users, error: usersError } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+  check({ error: usersError }, 'list users')
+  const owner = users.users.find((u) => u.email?.toLowerCase() === ownerEmail.toLowerCase())
+  if (!owner) {
+    console.error(`No Supabase Auth user with email ${ownerEmail}; register first.`)
+    process.exit(1)
+  }
+  check(
+    await supabase.from('traders').update({ user_id: owner.id }).in('id', created.map((t) => t.id)),
+    'link traders to user',
+  )
+  console.log(`Linked ${created.length} traders to ${ownerEmail}.`)
+}
+
 const idByEmail = Object.fromEntries(created.map((t) => [t.email, t.id]))
 
 for (const [email, symbol, side, quantity] of tickets) {

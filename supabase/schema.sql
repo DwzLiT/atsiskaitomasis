@@ -19,6 +19,10 @@ create table if not exists traders (
   created_at   timestamptz not null default now()
 );
 
+-- A signed-in user can own several traders; the portfolio aggregates them.
+alter table traders
+  add column if not exists user_id uuid references auth.users (id) on delete set null;
+
 -- One row per order ticket. A trader has many tickets.
 create table if not exists tickets (
   id         uuid primary key default gen_random_uuid(),
