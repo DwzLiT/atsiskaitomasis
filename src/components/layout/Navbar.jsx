@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { id: 'portfolio', label: 'Portfolio' },
   { id: 'trade', label: 'Trade' },
   { id: 'history', label: 'History' },
+  { id: 'traders', label: 'Traders' },
 ]
 
 export default function Navbar({ currentPage, onNavigate, user, onSignOut }) {

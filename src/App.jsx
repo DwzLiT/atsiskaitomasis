@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Portfolio from './pages/Portfolio'
 import Register from './pages/Register'
 import Trade from './pages/Trade'
+import Traders from './pages/Traders'
 import './App.css'
 import './styles/components.css'
 
@@ -14,6 +15,7 @@ const PAGES = {
   portfolio: Portfolio,
   trade: Trade,
   history: History,
+  traders: Traders,
   login: Login,
   register: Register,
 }
