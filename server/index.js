@@ -52,16 +52,29 @@ app.get('/api/quotes/:symbol', wrap(async (req, res) => {
   res.json(data)
 }))
 
-// Aggregated portfolio of all traders owned by the signed-in user.
-// Requires the user's Supabase access token as a Bearer token.
-app.get('/api/portfolio', wrap(async (req, res) => {
+// Resolves the signed-in user from the Supabase access token sent as a
+// Bearer token. Sends the 401 itself and returns null when there is none.
+async function requireUser(req, res, missingMessage) {
   const token = (req.headers.authorization ?? '').replace(/^Bearer /i, '')
-  if (!token) return res.status(401).json({ error: 'Sign in to see your portfolio' })
-  const { data: auth, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !auth?.user) return res.status(401).json({ error: 'Session expired, please sign in again' })
+  if (!token) {
+    res.status(401).json({ error: missingMessage })
+    return null
+  }
+  const { data: auth, error } = await supabase.auth.getUser(token)
+  if (error || !auth?.user) {
+    res.status(401).json({ error: 'Session expired, please sign in again' })
+    return null
+  }
+  return auth.user
+}
+
+// Aggregated portfolio of all traders owned by the signed-in user.
+app.get('/api/portfolio', wrap(async (req, res) => {
+  const user = await requireUser(req, res, 'Sign in to see your portfolio')
+  if (!user) return
 
   const { data: traders, error: tradersError } = await supabase
-    .from('traders').select('id, name, cash_balance').eq('user_id', auth.user.id)
+    .from('traders').select('id, name, cash_balance').eq('user_id', user.id)
   if (tradersError) throw tradersError
 
   let positions = []
@@ -82,10 +95,13 @@ app.get('/api/portfolio', wrap(async (req, res) => {
   res.json(aggregatePortfolio({ traders, positions, prices }))
 }))
 
-// All tickets across traders, newest first, with the trader's name.
-app.get('/api/tickets', wrap(async (_req, res) => {
+// Tickets of the signed-in user's traders, newest first, with the trader's name.
+app.get('/api/tickets', wrap(async (req, res) => {
+  const user = await requireUser(req, res, 'Sign in to see your history')
+  if (!user) return
   const { data, error } = await supabase
-    .from('tickets').select('*, traders(name)')
+    .from('tickets').select('*, traders!inner(name)')
+    .eq('traders.user_id', user.id)
     .order('created_at', { ascending: false })
   if (error) throw error
   res.json(data.map(({ traders, ...ticket }) => ({ ...ticket, trader_name: traders?.name })))
