@@ -8,7 +8,9 @@ const EMPTY = { userId: null, trader: null, positions: [], error: '' }
 async function fetchPortfolio() {
   const [traderResult, positionsResult] = await Promise.all([
     supabase.from('traders').select('*').single(),
-    supabase.from('positions').select('*, instruments(company, price, updated_at)'),
+    supabase
+      .from('positions')
+      .select('trader_id, symbol, shares, avg_cost, instruments(company, price, updated_at)'),
   ])
 
   if (traderResult.error || positionsResult.error) {

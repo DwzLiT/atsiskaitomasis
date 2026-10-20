@@ -63,7 +63,9 @@ function StockSearch({ initialStock, onSelect }) {
       setQuote(result)
       setSaveMessage(message)
     } catch (err) {
-      if (latestSymbol.current === match.symbol) setQuoteError(err.message)
+      if (latestSymbol.current === match.symbol) {
+        setQuoteError(err.message)
+      }
     } finally {
       if (latestSymbol.current === match.symbol) setQuoteLoading(false)
     }
@@ -107,11 +109,14 @@ function StockSearch({ initialStock, onSelect }) {
 
   function handleSubmit(e) {
     e.preventDefault()
-    if (showResults && search.results.length > 0) handleSelect(search.results[0])
+    if (showResults && search.results.length > 0) {
+      handleSelect(search.results[0])
+    }
   }
 
   const isUp = quote && quote.change != null && quote.change >= 0
-  const hasChange = quote && quote.change != null && quote.changePercent != null
+  const hasChange =
+    quote && quote.change != null && quote.changePercent != null
   const updatedLabel = quote ? formatUpdatedAt(quote.updatedAt) : null
 
   return (
@@ -130,13 +135,16 @@ function StockSearch({ initialStock, onSelect }) {
       </form>
 
       {isSearching && <p className="stock-status">Ieškoma...</p>}
-      {showResults && search.error && <p className="stock-error">{search.error}</p>}
+      {showResults && search.error && (
+        <p className="stock-error">{search.error}</p>
+      )}
       {showResults && !search.error && search.results.length === 0 && (
         <p className="stock-status">Nieko nerasta.</p>
       )}
       {showResults && search.fromSaved && search.results.length > 0 && (
         <p className="stock-status">
-          Alpha Vantage nepasiekiamas — rodomos anksčiau išsaugotos akcijos.
+          Alpha Vantage nepasiekiamas — rodomos anksčiau išsaugotos akcijos
+          (ne realaus laiko kainos).
         </p>
       )}
 
@@ -159,7 +167,9 @@ function StockSearch({ initialStock, onSelect }) {
           <span className="stock-symbol">{selected.symbol}</span>
           <span className="stock-name">{selected.name}</span>
 
-          {quoteLoading && <span className="stock-status">Kraunama kaina...</span>}
+          {quoteLoading && (
+            <span className="stock-status">Kraunama kaina...</span>
+          )}
           {quoteError && <p className="stock-error">{quoteError}</p>}
 
           {quote && (
@@ -167,7 +177,9 @@ function StockSearch({ initialStock, onSelect }) {
               <span className="stock-price">${quote.price.toFixed(2)}</span>
 
               {quote.source === 'saved' ? (
-                <span className="stock-saved-badge">Išsaugota kaina</span>
+                <span className="stock-saved-badge">
+                  Išsaugota kaina · ne realaus laiko
+                </span>
               ) : null}
 
               {hasChange ? (
@@ -177,11 +189,15 @@ function StockSearch({ initialStock, onSelect }) {
                   {quote.changePercent.toFixed(2)}%)
                 </span>
               ) : quote.source === 'saved' ? (
-                <span className="stock-status">Pokytis nepasiekiamas (atsarginė kaina)</span>
+                <span className="stock-status">
+                  Pokytis nepasiekiamas (atsarginė kaina)
+                </span>
               ) : null}
 
               {quote.source === 'live' && quote.date ? (
-                <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
+                <span className="stock-date">
+                  Paskutinė prekybos diena: {quote.date}
+                </span>
               ) : null}
 
               {quote.source === 'saved' ? (
@@ -189,6 +205,7 @@ function StockSearch({ initialStock, onSelect }) {
                   {updatedLabel
                     ? `Paskutinį kartą atnaujinta: ${updatedLabel}`
                     : 'Paskutinio atnaujinimo data nežinoma'}
+                  . Tai ne realaus laiko Alpha Vantage kaina.
                 </span>
               ) : null}
             </>
@@ -211,7 +228,11 @@ function StockSearch({ initialStock, onSelect }) {
           )}
 
           {quote && (
-            <TradeForm key={`${quote.symbol}-${quote.source}`} symbol={quote.symbol} price={quote.price} />
+            <TradeForm
+              key={`${quote.symbol}-${quote.source}`}
+              symbol={quote.symbol}
+              price={quote.price}
+            />
           )}
         </div>
       )}
