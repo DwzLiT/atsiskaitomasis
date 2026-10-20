@@ -11,9 +11,35 @@ export class ApiError extends Error {
   constructor(message, type) {
     super(message)
     this.name = 'ApiError'
-    // type: 'config' | 'network' | 'limit' | 'not_found' | 'api'
+    // type: 'config' | 'network' | 'limit' | 'not_found' | 'api' | 'unavailable'
     this.type = type
   }
+}
+
+/** Pašalina API raktą iš Alpha Vantage teksto, kad jis nepatektų į UI / logus. */
+function sanitizeApiMessage(message) {
+  if (!message) return ''
+  let text = String(message)
+  if (API_KEY) {
+    text = text.split(API_KEY).join('[REDACTED]')
+  }
+  // Kartais raktas pasirodo kaip query parametro dalis
+  text = text.replace(/([?&]apikey=)[^&\s]+/gi, '$1[REDACTED]')
+  return text.trim()
+}
+
+/** Tikras užklausų limito / dažnio pranešimas (Note arba Information). */
+function isRateLimitMessage(message) {
+  const text = String(message).toLowerCase()
+  return (
+    text.includes('api call frequency') ||
+    text.includes('call volume') ||
+    text.includes('rate limit') ||
+    text.includes('calls per minute') ||
+    text.includes('calls per day') ||
+    text.includes('25 requests per day') ||
+    text.includes('higher api call')
+  )
 }
 
 function readCache(key) {
@@ -68,14 +94,29 @@ async function fetchFromApi(params) {
   const data = await response.json()
 
   // Alpha Vantage visada grąžina 200, klaidas reikia tikrinti atsakymo turinyje
-  if (data.Note || data.Information) {
+  const notice = data.Note || data.Information
+  if (notice) {
+    const detail = sanitizeApiMessage(notice)
+
+    if (isRateLimitMessage(notice)) {
+      throw new ApiError(
+        `Pasiektas nemokamo Alpha Vantage plano užklausų limitas. Palaukite minutę ir bandykite dar kartą. (${detail})`,
+        'limit',
+      )
+    }
+
     throw new ApiError(
-      'Pasiektas nemokamo Alpha Vantage plano užklausų limitas. Palaukite minutę ir bandykite dar kartą.',
-      'limit',
+      `Alpha Vantage API pranešimas: ${detail || 'nežinoma klaida'}`,
+      'api',
     )
   }
+
   if (data['Error Message']) {
-    throw new ApiError('Akcija nerasta arba neteisinga užklausa', 'not_found')
+    const detail = sanitizeApiMessage(data['Error Message'])
+    throw new ApiError(
+      `Akcija nerasta arba neteisinga užklausa. (${detail})`,
+      'not_found',
+    )
   }
 
   return data

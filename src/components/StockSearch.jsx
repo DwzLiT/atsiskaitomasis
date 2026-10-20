@@ -1,29 +1,32 @@
 import { useEffect, useRef, useState } from 'react'
-import { getQuote, searchSymbols } from '../api/alphaVantage'
-import { supabase } from '../lib/supabase'
+import { ApiError, searchSymbols } from '../api/alphaVantage'
+import { searchSavedInstruments } from '../lib/instruments'
+import { resolveQuote } from '../lib/resolveQuote'
 import TradeForm from './TradeForm'
 import './StockSearch.css'
 
 const DEBOUNCE_MS = 500
 
-// Išsaugo kainą instruments lentelėje. Grąžina pranešimą vartotojui.
-async function saveInstrument(symbol, company, price) {
-  if (!supabase) return 'Kaina neišsaugota: Supabase nesukonfigūruotas.'
-
-  const { error } = await supabase.rpc('upsert_instrument', {
-    p_symbol: symbol,
-    p_company: company,
-    p_price: price,
-  })
-
-  return error
-    ? 'Kaina neišsaugota. Ar esate prisijungę?'
-    : 'Kaina išsaugota duomenų bazėje.'
+function formatUpdatedAt(value) {
+  if (!value) return null
+  try {
+    return new Intl.DateTimeFormat('lt-LT', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value))
+  } catch {
+    return String(value)
+  }
 }
 
 function StockSearch() {
   const [query, setQuery] = useState('')
-  const [search, setSearch] = useState({ query: '', results: [], error: '' })
+  const [search, setSearch] = useState({
+    query: '',
+    results: [],
+    error: '',
+    fromSaved: false,
+  })
   const [selected, setSelected] = useState(null)
   const [quote, setQuote] = useState(null)
   const [quoteError, setQuoteError] = useState('')
@@ -41,9 +44,40 @@ function StockSearch() {
     const timer = setTimeout(async () => {
       try {
         const results = await searchSymbols(trimmed)
-        if (!cancelled) setSearch({ query: trimmed, results, error: '' })
+        if (!cancelled) {
+          setSearch({ query: trimmed, results, error: '', fromSaved: false })
+        }
       } catch (err) {
-        if (!cancelled) setSearch({ query: trimmed, results: [], error: err.message })
+        if (cancelled) return
+
+        const canFallback =
+          err instanceof ApiError &&
+          (err.type === 'limit' ||
+            err.type === 'network' ||
+            err.type === 'config' ||
+            err.type === 'api')
+
+        if (canFallback) {
+          const saved = await searchSavedInstruments(trimmed)
+          if (!cancelled && saved.length > 0) {
+            setSearch({
+              query: trimmed,
+              results: saved,
+              error: '',
+              fromSaved: true,
+            })
+            return
+          }
+        }
+
+        if (!cancelled) {
+          setSearch({
+            query: trimmed,
+            results: [],
+            error: err.message,
+            fromSaved: false,
+          })
+        }
       }
     }, DEBOUNCE_MS)
 
@@ -66,11 +100,10 @@ function StockSearch() {
     setQuoteLoading(true)
 
     try {
-      const result = await getQuote(match.symbol)
+      const result = await resolveQuote(match.symbol, { company: match.name })
       if (latestSymbol.current !== match.symbol) return
       setQuote(result)
-      const message = await saveInstrument(match.symbol, match.name, result.price)
-      if (latestSymbol.current === match.symbol) setSaveMessage(message)
+      if (result.saveMessage) setSaveMessage(result.saveMessage)
     } catch (err) {
       if (latestSymbol.current === match.symbol) setQuoteError(err.message)
     } finally {
@@ -83,7 +116,9 @@ function StockSearch() {
     if (showResults && search.results.length > 0) handleSelect(search.results[0])
   }
 
-  const isUp = quote && quote.change >= 0
+  const isUp = quote && quote.change != null && quote.change >= 0
+  const hasChange = quote && quote.change != null && quote.changePercent != null
+  const updatedLabel = quote ? formatUpdatedAt(quote.updatedAt) : null
 
   return (
     <section className="stock-search">
@@ -104,6 +139,11 @@ function StockSearch() {
       {showResults && search.error && <p className="stock-error">{search.error}</p>}
       {showResults && !search.error && search.results.length === 0 && (
         <p className="stock-status">Nieko nerasta.</p>
+      )}
+      {showResults && search.fromSaved && search.results.length > 0 && (
+        <p className="stock-status">
+          Alpha Vantage nepasiekiamas — rodomos anksčiau išsaugotos akcijos.
+        </p>
       )}
 
       {showResults && search.results.length > 0 && (
@@ -131,18 +171,40 @@ function StockSearch() {
           {quote && (
             <>
               <span className="stock-price">${quote.price.toFixed(2)}</span>
-              <span className={isUp ? 'stock-up' : 'stock-down'}>
-                {isUp ? '+' : ''}
-                {quote.change.toFixed(2)} ({isUp ? '+' : ''}
-                {quote.changePercent.toFixed(2)}%)
-              </span>
-              <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
+
+              {quote.source === 'saved' ? (
+                <span className="stock-saved-badge">Išsaugota kaina</span>
+              ) : null}
+
+              {hasChange ? (
+                <span className={isUp ? 'stock-up' : 'stock-down'}>
+                  {isUp ? '+' : ''}
+                  {quote.change.toFixed(2)} ({isUp ? '+' : ''}
+                  {quote.changePercent.toFixed(2)}%)
+                </span>
+              ) : quote.source === 'saved' ? (
+                <span className="stock-status">Pokytis nepasiekiamas (atsarginė kaina)</span>
+              ) : null}
+
+              {quote.source === 'live' && quote.date ? (
+                <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
+              ) : null}
+
+              {quote.source === 'saved' ? (
+                <span className="stock-date">
+                  {updatedLabel
+                    ? `Paskutinį kartą atnaujinta: ${updatedLabel}`
+                    : 'Paskutinio atnaujinimo data nežinoma'}
+                </span>
+              ) : null}
             </>
           )}
 
           {saveMessage && <span className="stock-date">{saveMessage}</span>}
 
-          {quote && <TradeForm key={quote.symbol} symbol={quote.symbol} price={quote.price} />}
+          {quote && (
+            <TradeForm key={`${quote.symbol}-${quote.source}`} symbol={quote.symbol} price={quote.price} />
+          )}
         </div>
       )}
     </section>
