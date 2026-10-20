@@ -58,8 +58,21 @@ export default function Trade() {
   }, [])
 
   useEffect(() => {
-    loadTraders().catch((err) => setMessage({ type: 'error', text: err.message }))
-  }, [loadTraders])
+    let cancelled = false
+    api
+      .traders()
+      .then((list) => {
+        if (cancelled) return
+        setTraders(list)
+        setTraderId((current) => current || list[0]?.id || '')
+      })
+      .catch((err) => {
+        if (!cancelled) setMessage({ type: 'error', text: err.message })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!traderId) return
