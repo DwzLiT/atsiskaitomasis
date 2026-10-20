@@ -128,9 +128,9 @@ export default function Portfolio({ onNavigate }) {
     setRefreshing(true)
     setRefreshMessage(null)
     try {
-      await refreshQuotes(holdings.map((row) => row.symbol))
+      const text = await refreshQuotes(holdings.map((row) => row.symbol))
       await supabase.rpc('record_snapshot')
-      setRefreshMessage({ type: 'success', text: 'Kainos atnaujintos.' })
+      setRefreshMessage({ type: 'success', text })
     } catch (err) {
       setRefreshMessage({ type: 'error', text: err.message })
     } finally {

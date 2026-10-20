@@ -1,24 +1,27 @@
-import { getQuote } from '../api/alphaVantage'
-import { toLithuanianError } from '../utils/errors'
-import { supabase } from './supabase'
+import { resolveQuote } from './resolveQuote'
 
-// Saves a quote to instruments. `company` may be null to keep the stored name.
-export async function saveQuote(symbol, company, quote) {
-  const { error } = await supabase.rpc('upsert_instrument', {
-    p_symbol: symbol,
-    p_company: company,
-    p_price: quote.price,
-    p_change_percent: quote.changePercent,
-  })
-  if (error) throw new Error(toLithuanianError(error.message))
-}
-
-// Fetches fresh quotes one by one (cached for 5 min by alphaVantage.js) and
-// saves them. Stops at the first error, e.g. the free-tier rate limit; the
-// prices saved before it are kept.
+// Refreshes prices one by one (cached for 5 min by alphaVantage.js). Live
+// prices are saved; when the API limit is reached resolveQuote falls back to
+// the saved / demo price, so one symbol never blocks the others.
+// Returns a Lithuanian message for the user.
 export async function refreshQuotes(symbols) {
+  let live = 0
+  let fallback = 0
+  let failed = 0
+
   for (const symbol of symbols) {
-    const quote = await getQuote(symbol)
-    await saveQuote(symbol, null, quote)
+    try {
+      const quote = await resolveQuote(symbol)
+      if (quote.source === 'live') live += 1
+      else fallback += 1
+    } catch {
+      failed += 1
+    }
   }
+
+  if (fallback === 0 && failed === 0) return 'Kainos atnaujintos.'
+  if (live === 0 && failed === 0) {
+    return 'Alpha Vantage šiuo metu nepasiekiamas (dienos limitas) – rodomos paskutinės išsaugotos kainos.'
+  }
+  return `Atnaujinta: ${live}, išsaugotos / demonstracinės kainos: ${fallback}${failed ? `, nepavyko: ${failed}` : ''}.`
 }

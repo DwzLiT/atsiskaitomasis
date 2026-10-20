@@ -137,7 +137,7 @@ function StockSearch({ initialStock, onSelect }) {
       )}
       {showResults && search.fromSaved && (
         <p className="stock-status">
-          Alpha Vantage nepasiekiamas — rodomos anksčiau išsaugotos akcijos.
+          Alpha Vantage nepasiekiamas — rodomos išsaugotos ir demonstracinės akcijos.
         </p>
       )}
 
@@ -170,6 +170,9 @@ function StockSearch({ initialStock, onSelect }) {
               {quote.source === 'saved' ? (
                 <span className="stock-saved-badge">Išsaugota kaina</span>
               ) : null}
+              {quote.source === 'demo' ? (
+                <span className="stock-saved-badge">Demonstracinė kaina</span>
+              ) : null}
 
               {hasChange ? (
                 <span className={isUp ? 'stock-up' : 'stock-down'}>
@@ -181,7 +184,7 @@ function StockSearch({ initialStock, onSelect }) {
                 <span className="stock-status">Pokytis nepasiekiamas (atsarginė kaina)</span>
               ) : null}
 
-              {quote.source === 'live' && quote.date ? (
+              {quote.source !== 'saved' && quote.date ? (
                 <span className="stock-date">Paskutinė prekybos diena: {quote.date}</span>
               ) : null}
 

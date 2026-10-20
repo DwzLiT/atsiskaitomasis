@@ -15,6 +15,35 @@ let nextSlot = 0
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Pasiekus dienos limitą API nebekviečiame iki kitos dienos – iškart grąžiname
+// klaidą, kad būtų naudojamos išsaugotos / demonstracinės kainos.
+const DAILY_LIMIT_KEY = CACHE_PREFIX + 'dailyLimitDate'
+const DAILY_LIMIT_MESSAGE =
+  'Pasiektas šios dienos Alpha Vantage užklausų limitas (nemokamas planas – apie 25 per dieną). Kainos vėl atsinaujins rytoj.'
+let dailyLimitDate = null
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function isDailyLimitReached() {
+  if (dailyLimitDate === today()) return true
+  try {
+    return localStorage.getItem(DAILY_LIMIT_KEY) === today()
+  } catch {
+    return false
+  }
+}
+
+function markDailyLimitReached() {
+  dailyLimitDate = today()
+  try {
+    localStorage.setItem(DAILY_LIMIT_KEY, dailyLimitDate)
+  } catch {
+    // ignoruojame – liks tik atmintyje
+  }
+}
+
 // Laukia savo eilės, kad kelios užklausos iš eilės neviršytų limito.
 async function waitForTurn() {
   const now = Date.now()
@@ -94,6 +123,10 @@ async function fetchFromApi(params, retried = false) {
     throw new ApiError('Nerastas API raktas (VITE_ALPHA_VANTAGE_KEY faile .env)', 'config')
   }
 
+  if (isDailyLimitReached()) {
+    throw new ApiError(DAILY_LIMIT_MESSAGE, 'daily_limit')
+  }
+
   const url = `${BASE_URL}?${new URLSearchParams({ ...params, apikey: API_KEY })}`
 
   await waitForTurn()
@@ -117,10 +150,8 @@ async function fetchFromApi(params, retried = false) {
     const detail = sanitizeApiMessage(notice)
 
     if (/per day|daily/i.test(notice)) {
-      throw new ApiError(
-        'Pasiektas šios dienos Alpha Vantage užklausų limitas (nemokamas planas – apie 25 per dieną). Kainos vėl atsinaujins rytoj.',
-        'daily_limit',
-      )
+      markDailyLimitReached()
+      throw new ApiError(DAILY_LIMIT_MESSAGE, 'daily_limit')
     }
 
     if (isRateLimitMessage(notice)) {
