@@ -2,7 +2,7 @@
 
 Akcijų prekybos simuliatorius: vartotojas gauna **$10,000 virtualų balansą**, ieško
 akcijų, perka ir parduoda jas pagal **realias Alpha Vantage kainas**, o portfelis,
-sandoriai ir rezultatai saugomi **Supabase** duomenų bazėje.
+sandoriai ir rezultatai saugomi **Supabase** duomenų bazėje..
 
 > Tai mokymosi projektas („21. Vibe coding finalas“), ne finansinė rekomendacija.
 
