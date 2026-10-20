@@ -17,6 +17,7 @@ import { formatChange, formatMoney } from '../utils/format'
 
 const holdingColumns = [
   { key: 'symbol', label: 'Symbol' },
+  { key: 'traders', label: 'Traders' },
   {
     key: 'shares',
     label: 'Shares',

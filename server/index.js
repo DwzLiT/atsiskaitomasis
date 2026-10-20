@@ -61,14 +61,14 @@ app.get('/api/portfolio', wrap(async (req, res) => {
   if (authError || !auth?.user) return res.status(401).json({ error: 'Session expired, please sign in again' })
 
   const { data: traders, error: tradersError } = await supabase
-    .from('traders').select('id, cash_balance').eq('user_id', auth.user.id)
+    .from('traders').select('id, name, cash_balance').eq('user_id', auth.user.id)
   if (tradersError) throw tradersError
 
   let positions = []
   let prices = {}
   if (traders.length > 0) {
     const { data, error } = await supabase
-      .from('positions').select('symbol, shares, avg_cost').in('trader_id', traders.map((t) => t.id))
+      .from('positions').select('trader_id, symbol, shares, avg_cost').in('trader_id', traders.map((t) => t.id))
     if (error) throw error
     positions = data
     const symbols = [...new Set(positions.map((p) => p.symbol))]
