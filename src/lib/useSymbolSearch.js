@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
-import { searchSymbols } from '../api/alphaVantage'
+import { ApiError, searchSymbols } from '../api/alphaVantage'
+import { searchSavedInstruments } from './instruments'
 
 const DEBOUNCE_MS = 500
 
+// Klaidos, kurioms esant ieškome išsaugotose akcijose (pvz. pasiektas limitas)
+const FALLBACK_ERROR_TYPES = new Set(['limit', 'daily_limit', 'network', 'config', 'api'])
+
 // Alpha Vantage SYMBOL_SEARCH for `query`, run ~500 ms after typing stops.
+// If the API is unavailable, falls back to stocks saved in instruments.
 // Shared by the Trade search and the watchlist input.
 export default function useSymbolSearch(query) {
-  const [search, setSearch] = useState({ query: '', results: [], error: '' })
+  const [search, setSearch] = useState({ query: '', results: [], error: '', fromSaved: false })
   const trimmed = query.trim()
 
   useEffect(() => {
@@ -16,9 +21,21 @@ export default function useSymbolSearch(query) {
     const timer = setTimeout(async () => {
       try {
         const results = await searchSymbols(trimmed)
-        if (!cancelled) setSearch({ query: trimmed, results, error: '' })
+        if (!cancelled) setSearch({ query: trimmed, results, error: '', fromSaved: false })
       } catch (err) {
-        if (!cancelled) setSearch({ query: trimmed, results: [], error: err.message })
+        if (cancelled) return
+
+        if (err instanceof ApiError && FALLBACK_ERROR_TYPES.has(err.type)) {
+          const saved = await searchSavedInstruments(trimmed)
+          if (!cancelled && saved.length > 0) {
+            setSearch({ query: trimmed, results: saved, error: '', fromSaved: true })
+            return
+          }
+        }
+
+        if (!cancelled) {
+          setSearch({ query: trimmed, results: [], error: err.message, fromSaved: false })
+        }
       }
     }, DEBOUNCE_MS)
 
@@ -35,5 +52,6 @@ export default function useSymbolSearch(query) {
     showResults,
     results: showResults ? search.results : [],
     error: showResults ? search.error : '',
+    fromSaved: showResults && search.fromSaved,
   }
 }
